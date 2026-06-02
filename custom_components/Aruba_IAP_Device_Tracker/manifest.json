@@ -1,0 +1,10 @@
+{
+  "domain": "aruba_iap",
+  "name": "Aruba IAP Device Tracker",
+  "version": "1.1.0",
+  "config_flow": true,
+  "documentation": "https://github.com/yourusername/aruba_iap",
+  "requirements": ["requests>=2.28.0"],
+  "codeowners": [],
+  "iot_class": "local_polling"
+}
