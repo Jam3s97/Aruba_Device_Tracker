@@ -3,19 +3,19 @@
     "step": {
       "user": {
         "title": "Aruba IAP Device Tracker",
-        "description": "Enter the connection details for your Aruba Instant AP.\n\nMake sure REST API is enabled on the IAP:\n`(config)# allow-rest-api` then `# commit apply`",
+        "description": "Enter the connection details for your Aruba Instant AP.\n\nMake sure REST API is enabled on the IAP.",
         "data": {
           "host": "IP Address",
           "username": "Username",
           "password": "Password"
         },
         "data_description": {
-          "host": "IP address of your Aruba IAP or Virtual Controller (e.g. 192.168.1.1)"
+          "host": "IP address of your Aruba IAP or Virtual Controller (e.g. 192.168.1.10)"
         }
       },
       "tracking": {
         "title": "Tracking & Polling",
-        "description": "**Track new devices by default?**\n\n- **On** — new devices are automatically tracked as soon as they are discovered.\n- **Off** — new devices are discovered but their tracker entities will be **disabled** in HA. You can enable them individually in Settings → Devices & Services.\n\nBoth settings can be changed at any time.",
+        "description": "**Track new devices by default?**\n\n- **On** — new devices are automatically tracked as soon as they are discovered.\n- **Off** — new devices are discovered but their tracker entities will be **disabled** in HA. You can enable them individually in Settings → Devices & Services.\n\nHow often to query the IAP for connected clients. Min 10s, max 300s.\n\nBoth settings can be changed at any time.",
         "data": {
           "track_new_devices": "Track new devices by default",
           "scan_interval": "Poll interval (seconds)"
