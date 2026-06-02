@@ -1,6 +1,12 @@
 # Aruba Instant AP — Home Assistant Integration
 
-A custom integration for Home Assistant that tracks devices connected to an Aruba Instant AP using the local REST API (no Aruba Central required).
+A custom integration for Home Assistant that tracks devices connected to an Aruba Instant AP using the local REST API.
+
+Disclaimer: This is an unofficial integration and is not affiliated with or endorsed by Aruba Networks. Use at your own risk.
+
+## 🚧 Current Status
+
+**BETA** - This integration is in active development and testing.
 
 ## Features
 
@@ -33,15 +39,15 @@ A custom integration for Home Assistant that tracks devices connected to an Arub
 
 ## Installation
 
-### HACS (recommended)
-### Not published in HACS (YET)
-1. Add this repo as a custom repository in HACS
-2. Install "Aruba IAP Device Tracker"
-3. Restart Home Assistant
-
 ### Manual
 1. Copy the `custom_components/Aruba_IAP_Device_Tracker` folder into your HA `config/custom_components/` directory
 2. Restart Home Assistant
+
+### ⚠️HACS (recommended)
+### ⚠️ Not published in HACS (YET)
+1. Add this repo as a custom repository in HACS
+2. Install "Aruba IAP Device Tracker"
+3. Restart Home Assistant
 
 ## Setup
 
