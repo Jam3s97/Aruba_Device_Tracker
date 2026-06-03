@@ -40,19 +40,19 @@ Disclaimer: This is an unofficial integration and is not affiliated with or endo
 ## Installation
 
 ### Manual
-1. Copy the `custom_components/Aruba_IAP_Device_Tracker` folder into your HA `config/custom_components/` directory
+1. Copy the `custom_components/aruba_device_tracker` folder into your HA `config/custom_components/` directory
 2. Restart Home Assistant
 
 ### ⚠️HACS (recommended)
 ### ⚠️ Not published in HACS (YET)
 1. Add this repo as a custom repository in HACS
-2. Install "Aruba IAP Device Tracker"
+2. Install "aruba device tracker"
 3. Restart Home Assistant
 
 ## Setup
 
 1. Go to **Settings → Devices & Services → Add Integration**
-2. Search for **Aruba IAP Device Tracker**
+2. Search for **aruba device tracker**
 3. Enter:
    - **IP Address** — your IAP/VC IP (e.g. `192.168.1.10`)
    - **Username** — IAP admin username
@@ -66,5 +66,5 @@ After setup, click **Configure** on the integration to change the track-new-devi
 
 ## Renaming Devices
 
-Go to **Settings → Devices & Services → Aruba IAP Device Tracker**, click a device entity, then click the pencil icon to give it a friendly name. This is stored in the HA entity registry and persists across restarts.
+Go to **Settings → Devices & Services → aruba device tracker**, click a device entity, then click the pencil icon to give it a friendly name. This is stored in the HA entity registry and persists across restarts.
 

@@ -9,4 +9,4 @@ homeassistant:
 logger:
   default: info
   logs:
-    custom_components.Aruba_AP_Device_Tracker: debug
+    custom_components.aruba_device_tracker: debug

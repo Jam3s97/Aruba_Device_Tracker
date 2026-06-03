@@ -1,6 +1,6 @@
 """
-Aruba IAP Device Tracker — Home Assistant Integration.
-https://github.com/Jam3s97/Aruba_AP_Device_Tracker
+aruba device tracker — Home Assistant Integration.
+https://github.com/Jam3s97/aruba_device_tracker
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
 ) -> bool:
-    """Set up Aruba IAP Device Tracker using UI config entry."""
+    """Set up aruba device tracker using UI config entry."""
     client = ArubaIAPClient(
         host=entry.data[CONF_HOST],
         username=entry.data[CONF_USERNAME],

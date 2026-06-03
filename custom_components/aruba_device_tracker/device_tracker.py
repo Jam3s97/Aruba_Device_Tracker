@@ -1,4 +1,5 @@
-"""Aruba IAP device tracker platform."""
+"""aruba device tracker platform."""
+
 from __future__ import annotations
 
 import logging
@@ -102,12 +103,12 @@ class ArubaClientEntity(CoordinatorEntity, ScannerEntity):
             return {}
         return {
             ATTR_ACCESS_POINT: data.get("access_point"),
-            ATTR_ESSID:        data.get("essid"),
-            ATTR_IP_ADDRESS:   data.get("ip"),
-            ATTR_OS:           data.get("os"),
-            ATTR_CHANNEL:      data.get("channel"),
-            ATTR_SIGNAL:       data.get("signal"),
-            ATTR_SPEED:        data.get("speed"),
+            ATTR_ESSID: data.get("essid"),
+            ATTR_IP_ADDRESS: data.get("ip"),
+            ATTR_OS: data.get("os"),
+            ATTR_CHANNEL: data.get("channel"),
+            ATTR_SIGNAL: data.get("signal"),
+            ATTR_SPEED: data.get("speed"),
         }
 
     @property
