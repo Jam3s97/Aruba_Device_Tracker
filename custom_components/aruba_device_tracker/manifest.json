@@ -1,15 +1,11 @@
 {
   "domain": "aruba_device_tracker",
   "name": "Aruba Device Tracker",
-  "codeowners": [
-    "Jam3s97"
-  ],
+  "codeowners": ["Jam3s97"],
   "config_flow": true,
   "documentation": "https://github.com/Jam3s97/aruba_device_tracker",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/Jam3s97/Aruba_Device_Tracker/issues",
-  "requirements": [
-    "requests>=2.28.0"
-  ],
+  "requirements": ["requests>=2.28.0"],
   "version": "1.1.0",
 }
