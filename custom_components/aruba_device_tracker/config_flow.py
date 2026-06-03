@@ -1,4 +1,4 @@
-"""Config flow for aruba device tracker."""
+"""Config flow for Aruba Device Tracker."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import callback
@@ -17,9 +16,9 @@ from .const import (
     CONF_TRACK_NEW,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_TRACK_NEW,
-    MIN_SCAN_INTERVAL,
-    MAX_SCAN_INTERVAL,
     DOMAIN,
+    MAX_SCAN_INTERVAL,
+    MIN_SCAN_INTERVAL,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -43,7 +42,7 @@ async def _test_connection(hass, host, username, password) -> str | None:
 
 
 class ArubaIAPConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for aruba device tracker."""
+    """Handle a config flow for Aruba Device Tracker."""
 
     VERSION = 1
 
