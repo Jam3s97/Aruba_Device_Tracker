@@ -1,5 +1,5 @@
 {
-  "domain": "aruba_iap",
+  "domain": "Aruba Device Tracker",
   "name": "Aruba Device Tracker",
   "version": "1.1.0",
   "config_flow": true,
