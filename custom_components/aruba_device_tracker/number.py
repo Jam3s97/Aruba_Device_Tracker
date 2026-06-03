@@ -1,4 +1,4 @@
-"""Number platform — Poll Interval for aruba device tracker."""
+"""Number platform — Poll Interval for Aruba Device Tracker."""
 
 from __future__ import annotations
 

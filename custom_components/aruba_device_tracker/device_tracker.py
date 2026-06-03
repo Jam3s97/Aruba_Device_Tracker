@@ -1,4 +1,4 @@
-"""aruba device tracker platform."""
+"""Aruba Device Tracker platform."""
 
 from __future__ import annotations
 

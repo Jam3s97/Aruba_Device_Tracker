@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "aruba device tracker",
+        "title": "Aruba Device Tracker",
         "description": "Enter the connection details for your Aruba Instant AP.\n\nMake sure REST API is enabled on the IAP.",
         "data": {
           "host": "IP Address",

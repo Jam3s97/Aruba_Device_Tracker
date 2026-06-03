@@ -1,4 +1,4 @@
-"""Constants for the aruba device tracker integration."""
+"""Constants for the Aruba Device Tracker integration."""
 
 DOMAIN = "aruba_iap"
 

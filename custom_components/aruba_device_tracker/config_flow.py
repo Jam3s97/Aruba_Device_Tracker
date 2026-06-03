@@ -1,4 +1,4 @@
-"""Config flow for aruba device tracker."""
+"""Config flow for Aruba Device Tracker."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ async def _test_connection(hass, host, username, password) -> str | None:
 
 
 class ArubaIAPConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for aruba device tracker."""
+    """Handle a config flow for Aruba Device Tracker."""
 
     VERSION = 1
 
