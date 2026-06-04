@@ -37,32 +37,6 @@ Disclaimer: This is an unofficial integration and is not affiliated with or endo
 (Instant AP)(config)# end
 (Instant AP)# commit apply
 ```
-## Default away timer behaviour
-
-The default Aruba IAP client inactivity timer is 1000 seconds (16 minutes 40 seconds). This means when a client disconnects from the wireless network, the session will remain in the client table for 1000 seconds.
-- Time for a device to show as away: 1000 seconds + time until next poll
-- Time for a device to show as home: Time until next poll after the client connects (default under 30 seconds).
-
-You may want to reduce the inactivity timer. For example, to 300 seconds (5 minutes):
-
->[!NOTE]
-Consider the impact of lowering this value in your environment. Be cautious of going to low.
-> The inactivity timeout controls how long a client session remains active after disconnecting.
-
-Via Web GUI
-1. Navigate to Configuration > Networks, select your network and click Edit (pencil icon)
-2. Click Show Advanced
-3. Under Miscellaneous, update Inactivity timeout to the desired value
-4. Scroll to the bottom. Next > Next > Finish
-
-Via CLI
-```
-Instant AP (config) # wlan ssid-profile <name>
-Instant AP (SSID Profile "<name>") # inactivity-timeout <interval>    (60-86400 seconds)
-Instant AP (SSID Profile "<name>") # inactivity-timeout 300
-Instant AP (SSID Profile "<name>") # end
-Instant AP# commit apply
-```
 
 ## Installation
 
@@ -94,4 +68,33 @@ After setup, click **Configure** on the integration to change the track-new-devi
 ## Renaming Devices
 
 Go to **Settings → Devices & Services → Aruba Device Tracker**, click a device entity, then click the pencil icon to give it a friendly name. This is stored in the HA entity registry and persists across restarts.
+
+## Default away timer behaviour
+
+The default Aruba IAP client inactivity timer is 1000 seconds (16 minutes 40 seconds). This means when a client disconnects from the wireless network, the session will remain in the client table for 1000 seconds.
+- Time for a device to show as away: 1000 seconds + time until next poll
+- Time for a device to show as home: Time until next poll after the client connects (default under 30 seconds).
+
+You may want to reduce the inactivity timer. For example, to 300 seconds (5 minutes):
+
+>[!NOTE]
+Consider the impact of lowering this value in your environment. Be cautious of going to low.
+> The inactivity timeout controls how long a client session remains active after disconnecting.
+
+Via Web GUI
+1. Navigate to Configuration > Networks, select your network and click Edit (pencil icon)
+2. Click Show Advanced
+3. Under Miscellaneous, update Inactivity timeout to the desired value
+<img width="1084" height="295" alt="Screenshot from 2026-06-04 13-54-01" src="https://github.com/user-attachments/assets/a0dac1a7-bd69-4b8b-b3bf-f9cb838e3035" />
+
+4. Scroll to the bottom. Next > Next > Next Finish
+
+Via CLI
+```
+Instant AP (config) # wlan ssid-profile <name>
+Instant AP (SSID Profile "<name>") # inactivity-timeout <interval>    (60-86400 seconds)
+Instant AP (SSID Profile "<name>") # inactivity-timeout 300
+Instant AP (SSID Profile "<name>") # end
+Instant AP# commit apply
+```
 
