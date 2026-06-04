@@ -93,7 +93,25 @@ class ArubaIAPClient:
                 timeout=10,
             )
             data = resp.json()
-        except Exception:
+        except requests.exceptions.ConnectTimeout:
+            _LOGGER.warning(
+                "Aruba IAP login timed out connecting to %s — AP may be unreachable",
+                self.host,
+            )
+            return False
+        except requests.exceptions.ConnectionError:
+            _LOGGER.warning(
+                "Aruba IAP login connection error for %s — check host/network",
+                self.host,
+            )
+            return False
+        except requests.exceptions.JSONDecodeError:
+            _LOGGER.warning(
+                "Aruba IAP login returned an invalid response from %s",
+                self.host,
+            )
+            return False
+        except Exception:  # noqa: BLE001
             _LOGGER.exception("Aruba IAP login failed unexpectedly")
             return False
         else:
@@ -179,8 +197,30 @@ class ArubaIAPClient:
             output = data.get("Command output", "")
             return output.replace("\\n", "\n").replace("\\r", "\r")
 
-        except Exception:
-            _LOGGER.exception("Aruba IAP show-cmd exception")
+        except requests.exceptions.JSONDecodeError:
+            _LOGGER.warning(
+                "Aruba IAP returned empty/invalid response for cmd '%s' "
+                "(AP may be busy or session dropped) — will retry next poll",
+                cmd,
+            )
+            self._sid = None
+            return None
+        except requests.exceptions.Timeout:
+            _LOGGER.warning(
+                "Aruba IAP timed out running cmd '%s' — will retry next poll",
+                cmd,
+            )
+            self._sid = None
+            return None
+        except requests.exceptions.ConnectionError:
+            _LOGGER.warning(
+                "Aruba IAP connection error running cmd '%s' — AP may be unreachable",
+                cmd,
+            )
+            self._sid = None
+            return None
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Aruba IAP show-cmd unexpected exception")
             self._sid = None
             return None
 
