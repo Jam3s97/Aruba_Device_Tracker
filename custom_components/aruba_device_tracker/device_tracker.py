@@ -228,6 +228,18 @@ class ArubaClientEntity(ScannerEntity):
         }
 
     @property
+    def device_info(self) -> None:
+        """
+        Return None — tracker entities are not associated with a device.
+
+        Explicitly returning None prevents HA from auto-creating a device
+        registry entry using the mac_address property as a CONNECTION_NETWORK_MAC
+        connection, which would cause these entities to be incorrectly merged
+        into existing devices (vacuums, cameras, etc.) that share the same MAC.
+        """
+        return None
+
+    @property
     def entity_registry_enabled_default(self) -> bool:
         """Return whether this entity is enabled when first created."""
         return self._new_device_defaults_tracked
