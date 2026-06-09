@@ -12,12 +12,18 @@ from homeassistant.core import HomeAssistant, callback
 
 from .aruba_client import ArubaIAPClient
 from .const import (
+    CONF_CLEANUP_DAYS,
+    CONF_CLEANUP_ENABLED,
     CONF_SCAN_INTERVAL,
     CONF_TRACK_NEW,
+    DEFAULT_CLEANUP_DAYS,
+    DEFAULT_CLEANUP_ENABLED,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_TRACK_NEW,
     DOMAIN,
+    MAX_CLEANUP_DAYS,
     MAX_SCAN_INTERVAL,
+    MIN_CLEANUP_DAYS,
     MIN_SCAN_INTERVAL,
 )
 
@@ -104,6 +110,8 @@ class ArubaIAPConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 **self._connection_data,
                 CONF_TRACK_NEW: user_input[CONF_TRACK_NEW],
                 CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
+                CONF_CLEANUP_ENABLED: user_input[CONF_CLEANUP_ENABLED],
+                CONF_CLEANUP_DAYS: user_input[CONF_CLEANUP_DAYS],
             }
             return self.async_create_entry(
                 title=f"Aruba IAP ({self._connection_data[CONF_HOST]})",
@@ -119,6 +127,14 @@ class ArubaIAPConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL
                     ): vol.All(
                         int, vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL)
+                    ),
+                    vol.Optional(
+                        CONF_CLEANUP_ENABLED, default=DEFAULT_CLEANUP_ENABLED
+                    ): bool,
+                    vol.Optional(
+                        CONF_CLEANUP_DAYS, default=DEFAULT_CLEANUP_DAYS
+                    ): vol.All(
+                        int, vol.Range(min=MIN_CLEANUP_DAYS, max=MAX_CLEANUP_DAYS)
                     ),
                 }
             ),
@@ -150,6 +166,8 @@ class ArubaIAPOptionsFlow(config_entries.OptionsFlow):
             password = user_input[CONF_PASSWORD]
             track_new = user_input[CONF_TRACK_NEW]
             scan_interval = user_input[CONF_SCAN_INTERVAL]
+            cleanup_enabled = user_input[CONF_CLEANUP_ENABLED]
+            cleanup_days = user_input[CONF_CLEANUP_DAYS]
 
             connection_changed = (
                 host != current.get(CONF_HOST)
@@ -171,13 +189,23 @@ class ArubaIAPOptionsFlow(config_entries.OptionsFlow):
                         CONF_PASSWORD: password,
                         CONF_TRACK_NEW: track_new,
                         CONF_SCAN_INTERVAL: scan_interval,
+                        CONF_CLEANUP_ENABLED: cleanup_enabled,
+                        CONF_CLEANUP_DAYS: cleanup_days,
                     },
                 )
+                if connection_changed:
+                    self.hass.async_create_task(
+                        self.hass.config_entries.async_reload(
+                            self.config_entry.entry_id
+                        )
+                    )
                 return self.async_create_entry(
                     title="",
                     data={
                         CONF_TRACK_NEW: track_new,
                         CONF_SCAN_INTERVAL: scan_interval,
+                        CONF_CLEANUP_ENABLED: cleanup_enabled,
+                        CONF_CLEANUP_DAYS: cleanup_days,
                     },
                 )
 
@@ -207,6 +235,22 @@ class ArubaIAPOptionsFlow(config_entries.OptionsFlow):
                         ),
                     ): vol.All(
                         int, vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL)
+                    ),
+                    vol.Optional(
+                        CONF_CLEANUP_ENABLED,
+                        default=current_options.get(
+                            CONF_CLEANUP_ENABLED,
+                            current.get(CONF_CLEANUP_ENABLED, DEFAULT_CLEANUP_ENABLED),
+                        ),
+                    ): bool,
+                    vol.Optional(
+                        CONF_CLEANUP_DAYS,
+                        default=current_options.get(
+                            CONF_CLEANUP_DAYS,
+                            current.get(CONF_CLEANUP_DAYS, DEFAULT_CLEANUP_DAYS),
+                        ),
+                    ): vol.All(
+                        int, vol.Range(min=MIN_CLEANUP_DAYS, max=MAX_CLEANUP_DAYS)
                     ),
                 }
             ),

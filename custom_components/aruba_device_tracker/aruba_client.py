@@ -10,6 +10,7 @@ from typing import Any
 
 import requests
 import urllib3
+from homeassistant.helpers.device_registry import format_mac
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -246,7 +247,7 @@ class ArubaIAPClient:
             # retain their leading whitespace for the regex to anchor against.
             match = _CLIENT_REGEX.match(line)
             if match:
-                mac = match.group("mac").upper().replace("-", ":")
+                mac = format_mac(match.group("mac"))
                 name = match.group("name").strip() or mac
                 clients[mac] = {
                     "mac": mac,
