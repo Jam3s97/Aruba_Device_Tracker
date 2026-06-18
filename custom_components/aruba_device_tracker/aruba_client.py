@@ -6,15 +6,23 @@ import contextlib
 import json
 import logging
 import re
+import ssl
 from typing import Any
 
 import requests
 import urllib3
 from homeassistant.helpers.device_registry import format_mac
+from requests.adapters import HTTPAdapter
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 _LOGGER = logging.getLogger(__name__)
+
+# Substring present in the SSLError raised when a server requires legacy
+# (insecure) TLS renegotiation and the local OpenSSL build has that
+# disabled by default. Some Instant AOS versions hit this on modern
+# Debian/Ubuntu-based hosts running OpenSSL 3.x.
+_LEGACY_TLS_MARKER = "UNSAFE_LEGACY_RENEGOTIATION_DISABLED"
 
 # Parses each client row from 'show clients' output.
 #
@@ -59,6 +67,39 @@ _SKIP_PREFIXES = (
 )
 
 
+class _LegacyTLSAdapter(HTTPAdapter):
+    """
+    Transport adapter that allows legacy/insecure TLS renegotiation.
+
+    Some Aruba Instant AP firmware versions expose a TLS stack that
+    doesn't support secure renegotiation (RFC 5746). OpenSSL 3.x on
+    several modern Linux distributions disables legacy renegotiation by
+    default, which surfaces as:
+
+        ssl.SSLError: [SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED]
+
+    This adapter re-enables it for hosts that need it. It's only mounted
+    onto a session after that specific error has actually been seen, so
+    it never weakens TLS for APs that don't need it.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Build the adapter with a legacy-renegotiation-friendly context."""
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        # SSL_OP_LEGACY_SERVER_CONNECT. Named constant only exists on
+        # Python 3.12+, so fall back to the raw OpenSSL flag value.
+        ctx.options |= getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0x4)
+        self._ssl_context = ctx
+        super().__init__(*args, **kwargs)
+
+    def init_poolmanager(self, *args: Any, **kwargs: Any) -> None:
+        """Inject the legacy SSL context into the connection pool."""
+        kwargs["ssl_context"] = self._ssl_context
+        super().init_poolmanager(*args, **kwargs)
+
+
 class ArubaIAPClient:
     """Client for the Aruba Instant AP REST API."""
 
@@ -76,6 +117,44 @@ class ArubaIAPClient:
         self.base_url = f"https://{host}:{port}/rest"
         self._headers = {"Content-Type": "application/json"}
         self._sid: str | None = None
+        self._session = requests.Session()
+        self._legacy_ssl = False
+
+    # ------------------------------------------------------------------
+    # Transport
+    # ------------------------------------------------------------------
+
+    def _enable_legacy_ssl(self) -> None:
+        """Switch the shared session to a legacy-TLS-compatible adapter."""
+        _LOGGER.warning(
+            "Aruba IAP at %s requires legacy TLS renegotiation; "
+            "switching to compatibility mode for this connection",
+            self.host,
+        )
+        self._session.mount("https://", _LegacyTLSAdapter())
+        self._legacy_ssl = True
+
+    def _session_request(
+        self, method: str, url: str, **kwargs: Any
+    ) -> requests.Response:
+        """
+        Issue a request via the shared session.
+
+        If the AP requires legacy TLS renegotiation, the first attempt
+        raises an SSLError containing UNSAFE_LEGACY_RENEGOTIATION_DISABLED.
+        On that specific error, switch to the legacy adapter and retry
+        once. Once switched, the session stays in legacy mode for the
+        lifetime of this client instance, so later calls go straight
+        through without re-attempting the normal path first.
+        """
+        kwargs.setdefault("verify", False)
+        try:
+            return self._session.request(method, url, **kwargs)
+        except requests.exceptions.SSLError as err:
+            if self._legacy_ssl or _LEGACY_TLS_MARKER not in str(err):
+                raise
+            self._enable_legacy_ssl()
+            return self._session.request(method, url, **kwargs)
 
     # ------------------------------------------------------------------
     # Auth
@@ -86,11 +165,11 @@ class ArubaIAPClient:
         url = f"{self.base_url}/login"
         payload = json.dumps({"user": self.username, "passwd": self.password})
         try:
-            resp = requests.post(
+            resp = self._session_request(
+                "post",
                 url,
                 headers=self._headers,
                 data=payload,
-                verify=False,  # noqa: S501
                 timeout=10,
             )
             data = resp.json()
@@ -128,11 +207,11 @@ class ArubaIAPClient:
         if not self._sid:
             return
         with contextlib.suppress(Exception):
-            requests.post(
+            self._session_request(
+                "post",
                 f"{self.base_url}/logout",
                 headers=self._headers,
                 data=json.dumps({"sid": self._sid}),
-                verify=False,  # noqa: S501
                 timeout=10,
             )
         self._sid = None
@@ -160,10 +239,10 @@ class ArubaIAPClient:
 
         output: str | None = None
         try:
-            resp = requests.get(
+            resp = self._session_request(
+                "get",
                 url,
                 headers=self._headers,
-                verify=False,  # noqa: S501
                 timeout=15,
             )
             data = resp.json()
@@ -179,10 +258,10 @@ class ArubaIAPClient:
                     f"{self.base_url}/show-cmd"
                     f"?iap_ip_addr={self.host}&cmd={encoded_cmd}&sid={self._sid}"
                 )
-                resp = requests.get(
+                resp = self._session_request(
+                    "get",
                     url,
                     headers=self._headers,
-                    verify=False,  # noqa: S501
                     timeout=15,
                 )
                 data = resp.json()
