@@ -47,7 +47,7 @@ async def _test_connection(
         await hass.async_add_executor_job(client.logout)
         if clients is None:
             return "api_access_denied"
-    except Exception:  # noqa: BLE001
+    except Exception:
         LOGGER.debug("Aruba IAP connection test exception", exc_info=True)
         return "cannot_connect"
     else:
