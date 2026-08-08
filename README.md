@@ -1,3 +1,31 @@
+[![Release][release-shield]][release-url]
+[![Stargazers][stars-shield]][stars-url]
+[![HACS][hacs-shield]][hacs-url]
+
+![GitHub last commit][gh-last-commit]
+
+[![Contributors][contributors-shield]][contributors-url]
+[![Forks][forks-shield]][forks-url]
+[![Issues][issues-shield]][issues-url]
+
+[![MIT License][license-shield]][license-url]
+
+[release-shield]: https://img.shields.io/github/v/release/Jam3s97/Aruba_Device_Tracker?style=for-the-badge&color=orange
+[release-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/releases
+[stars-shield]: https://img.shields.io/github/stars/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
+[stars-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/stargazers
+[hacs-shield]: https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge
+[hacs-url]: https://github.com/hacs/integration
+[gh-last-commit]: https://img.shields.io/github/last-commit/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
+[contributors-shield]: https://img.shields.io/github/contributors/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
+[contributors-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
+[forks-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/network/members
+[issues-shield]: https://img.shields.io/github/issues/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
+[issues-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/issues
+[license-shield]: https://img.shields.io/github/license/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
+[license-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/blob/main/LICENSE
+
 # Aruba Instant AP — Home Assistant Integration
 
 A custom integration for Home Assistant that tracks devices connected to an Aruba Instant AP using the local REST API.
