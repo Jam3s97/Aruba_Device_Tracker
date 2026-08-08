@@ -1,12 +1,15 @@
 [![Release][release-shield]][release-url]
-[![Stargazers][stars-shield]][stars-url]
 [![HACS][hacs-shield]][hacs-url]
+[![Stars][stars-shield]][stars-url]
 
+![GitHub last release date][gh-last-release-date]
 ![GitHub last commit][gh-last-commit]
 
+[![Lint][lint-shield]][lint-url]
+[![Issues][issues-shield]][issues-url]
 [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
-[![Issues][issues-shield]][issues-url]
+[![Lines of Code][lines]][lines-url]
 
 [![MIT License][license-shield]][license-url]
 
@@ -16,13 +19,18 @@
 [stars-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/stargazers
 [hacs-shield]: https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge
 [hacs-url]: https://github.com/hacs/integration
+[gh-last-release-date]: https://img.shields.io/github/release-date/Jam3s97/Aruba_Device_Tracker?style=for-the-badge&label=Last%20Release%20Date
 [gh-last-commit]: https://img.shields.io/github/last-commit/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
 [contributors-shield]: https://img.shields.io/github/contributors/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
 [contributors-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/graphs/contributors
 [forks-shield]: https://img.shields.io/github/forks/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
 [forks-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/network/members
+[lint-shield]: https://img.shields.io/github/actions/workflow/status/Jam3s97/Aruba_Device_Tracker/lint.yml?style=for-the-badge&label=Lint
+[lint-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/actions/workflows/lint.yml
 [issues-shield]: https://img.shields.io/github/issues/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
 [issues-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/issues
+[lines]: https://img.shields.io/endpoint?url=https%3A%2F%2Fghloc.vercel.app%2Fapi%2FJam3s97%2FAruba_Device_Tracker%2Fbadge&style=for-the-badge&label=Lines%20Of%20Code
+[lines-url]: https://github.com/Jam3s97/Aruba_Device_Tracker
 [license-shield]: https://img.shields.io/github/license/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
 [license-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/blob/main/LICENSE
 
