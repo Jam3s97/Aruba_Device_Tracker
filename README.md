@@ -1,6 +1,11 @@
+# Aruba Instant AP — Home Assistant Integration
+
+A custom integration for Home Assistant that tracks devices connected to an Aruba Instant AP using the local REST API.
+
 [![Release][release-shield]][release-url]
 [![HACS][hacs-shield]][hacs-url]
 [![Stars][stars-shield]][stars-url]
+[![hainstall][hainstallbadge]][hainstall]
 
 ![GitHub last release date][gh-last-release-date]
 ![GitHub last commit][gh-last-commit]
@@ -9,34 +14,8 @@
 [![Issues][issues-shield]][issues-url]
 [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
-[![Lines of Code][lines]][lines-url]
 
 [![MIT License][license-shield]][license-url]
-
-[release-shield]: https://img.shields.io/github/v/release/Jam3s97/Aruba_Device_Tracker?style=for-the-badge&color=orange
-[release-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/releases
-[stars-shield]: https://img.shields.io/github/stars/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
-[stars-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/stargazers
-[hacs-shield]: https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge
-[hacs-url]: https://github.com/hacs/integration
-[gh-last-release-date]: https://img.shields.io/github/release-date/Jam3s97/Aruba_Device_Tracker?style=for-the-badge&label=Last%20Release%20Date
-[gh-last-commit]: https://img.shields.io/github/last-commit/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
-[contributors-shield]: https://img.shields.io/github/contributors/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
-[contributors-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
-[forks-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/network/members
-[lint-shield]: https://img.shields.io/github/actions/workflow/status/Jam3s97/Aruba_Device_Tracker/lint.yml?style=for-the-badge&label=Lint
-[lint-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/actions/workflows/lint.yml
-[issues-shield]: https://img.shields.io/github/issues/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
-[issues-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/issues
-[lines]: https://img.shields.io/endpoint?url=https%3A%2F%2Fghloc.vercel.app%2Fapi%2FJam3s97%2FAruba_Device_Tracker%2Fbadge&style=for-the-badge&label=Lines%20Of%20Code
-[lines-url]: https://github.com/Jam3s97/Aruba_Device_Tracker
-[license-shield]: https://img.shields.io/github/license/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
-[license-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/blob/main/LICENSE
-
-# Aruba Instant AP — Home Assistant Integration
-
-A custom integration for Home Assistant that tracks devices connected to an Aruba Instant AP using the local REST API.
 
 > **Disclaimer:** This is an unofficial integration and is not affiliated with or endorsed by Aruba Networks. Use at your own risk.
 
@@ -147,3 +126,30 @@ Instant AP (SSID Profile "<name>") # inactivity-timeout 300    (60–86400 secon
 Instant AP (SSID Profile "<name>") # end
 Instant AP# commit apply
 ```
+
+
+
+
+
+[release-shield]: https://img.shields.io/github/v/release/Jam3s97/Aruba_Device_Tracker?style=for-the-badge&color=orange
+[release-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/releases
+[stars-shield]: https://img.shields.io/github/stars/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
+[stars-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/stargazers
+[hacs-shield]: https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge
+[hacs-url]: https://github.com/hacs/integration
+
+[hainstall]: https://my.home-assistant.io/redirect/config_flow_start/?domain=aruba_device_tracker
+[hainstallbadge]: https://img.shields.io/badge/dynamic/json?style=for-the-badge&logo=home-assistant&logoColor=ccc&label=usage&suffix=%20installs&cacheSeconds=15600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.aruba_device_tracker.total
+
+[gh-last-release-date]: https://img.shields.io/github/release-date/Jam3s97/Aruba_Device_Tracker?style=for-the-badge&label=Last%20Release%20Date
+[gh-last-commit]: https://img.shields.io/github/last-commit/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
+[contributors-shield]: https://img.shields.io/github/contributors/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
+[contributors-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
+[forks-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/network/members
+[lint-shield]: https://img.shields.io/github/actions/workflow/status/Jam3s97/Aruba_Device_Tracker/lint.yml?style=for-the-badge&label=Lint
+[lint-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/actions/workflows/lint.yml
+[issues-shield]: https://img.shields.io/github/issues/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
+[issues-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/issues
+[license-shield]: https://img.shields.io/github/license/Jam3s97/Aruba_Device_Tracker?style=for-the-badge
+[license-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/blob/main/LICENSE
