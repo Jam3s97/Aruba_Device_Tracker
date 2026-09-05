@@ -27,6 +27,10 @@ ATTR_CHANNEL = "channel"
 ATTR_SIGNAL = "signal"
 ATTR_SPEED = "speed"
 
+# Last-seen / cleanup attribute keys
+ATTR_LAST_SEEN = "last_seen"
+ATTR_DAYS_UNTIL_CLEANUP = "days_until_cleanup"
+
 # Storage key for last-seen timestamps
 STORAGE_KEY = f"{DOMAIN}.last_seen"
 STORAGE_VERSION = 1
