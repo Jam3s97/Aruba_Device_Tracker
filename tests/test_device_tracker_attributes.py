@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
 from custom_components.aruba_device_tracker.const import (
     ATTR_ACCESS_POINT,
     ATTR_DAYS_UNTIL_CLEANUP,
@@ -93,7 +91,7 @@ def test_days_until_cleanup_clamped_at_zero():
     assert attrs[ATTR_DAYS_UNTIL_CLEANUP] == 0
 
 
-def test_invalid_last_seen_timestamp_skips_cleanup_calc(caplog: pytest.LogCaptureFixture):
+def test_invalid_last_seen_timestamp_skips_cleanup_calc():
     """A malformed stored timestamp shouldn't raise; last_seen still surfaces."""
     coordinator = FakeCoordinator(
         data=None,
