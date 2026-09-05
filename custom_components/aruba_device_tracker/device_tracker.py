@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.device_tracker import ScannerEntity, SourceType
@@ -13,8 +14,10 @@ from homeassistant.helpers.device_registry import format_mac
 from .const import (
     ATTR_ACCESS_POINT,
     ATTR_CHANNEL,
+    ATTR_DAYS_UNTIL_CLEANUP,
     ATTR_ESSID,
     ATTR_IP_ADDRESS,
+    ATTR_LAST_SEEN,
     ATTR_OS,
     ATTR_SIGNAL,
     ATTR_SPEED,
@@ -212,20 +215,45 @@ class ArubaClientEntity(ScannerEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional state attributes from the IAP."""
-        if self._coordinator.data is None:
-            return {}
-        data = self._coordinator.data.get(self._mac)
-        if not data:
-            return {}
-        return {
-            ATTR_ACCESS_POINT: data.get("access_point"),
-            ATTR_ESSID: data.get("essid"),
-            ATTR_IP_ADDRESS: data.get("ip"),
-            ATTR_OS: data.get("os"),
-            ATTR_CHANNEL: data.get("channel"),
-            ATTR_SIGNAL: data.get("signal"),
-            ATTR_SPEED: data.get("speed"),
-        }
+        attrs: dict[str, Any] = {}
+
+        # Last-seen / cleanup countdown — sourced from persistent storage,
+        # so these survive restarts unlike the state's last_changed. Populated
+        # whether the device is currently online or away.
+        last_seen_iso = self._coordinator.last_seen.get(self._mac)
+        if last_seen_iso is not None:
+            attrs[ATTR_LAST_SEEN] = last_seen_iso
+            if self._coordinator.cleanup_enabled:
+                try:
+                    last_seen_dt = datetime.fromisoformat(last_seen_iso)
+                except ValueError:
+                    last_seen_dt = None
+                if last_seen_dt is not None:
+                    cleanup_at = last_seen_dt + timedelta(
+                        days=self._coordinator.cleanup_days
+                    )
+                    remaining = cleanup_at - datetime.now(tz=UTC)
+                    attrs[ATTR_DAYS_UNTIL_CLEANUP] = max(
+                        0, round(remaining.total_seconds() / 86400)
+                    )
+
+        # Live IAP session details — only available while the device is
+        # actually connected.
+        data = (self._coordinator.data or {}).get(self._mac)
+        if data:
+            attrs.update(
+                {
+                    ATTR_ACCESS_POINT: data.get("access_point"),
+                    ATTR_ESSID: data.get("essid"),
+                    ATTR_IP_ADDRESS: data.get("ip"),
+                    ATTR_OS: data.get("os"),
+                    ATTR_CHANNEL: data.get("channel"),
+                    ATTR_SIGNAL: data.get("signal"),
+                    ATTR_SPEED: data.get("speed"),
+                }
+            )
+
+        return attrs
 
     @property
     def entity_registry_enabled_default(self) -> bool:
