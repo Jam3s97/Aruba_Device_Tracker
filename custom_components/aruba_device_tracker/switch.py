@@ -17,16 +17,17 @@ from .const import (
 from .utils import get_device_info
 
 if TYPE_CHECKING:
-    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+    from . import ArubaConfigEntry
 
 LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,  # noqa: ARG001
-    entry: ConfigEntry,
+    entry: ArubaConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up switch entities for the IAP control device."""
@@ -54,12 +55,12 @@ class ArubaTrackNewSwitch(SwitchEntity):
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:radar"
+    _attr_translation_key = "track_new_devices"
 
-    def __init__(self, entry: ConfigEntry) -> None:
+    def __init__(self, entry: ArubaConfigEntry) -> None:
         """Initialise the track-new-devices switch."""
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_track_new_devices"
-        self._attr_name = "Track New Devices"
         self._attr_device_info = get_device_info(entry)
 
     @property
@@ -84,6 +85,7 @@ class ArubaTrackNewSwitch(SwitchEntity):
         new_options = {**self._entry.options, CONF_TRACK_NEW: value}
         self.hass.config_entries.async_update_entry(self._entry, options=new_options)
         self.async_write_ha_state()
+        LOGGER.debug("Aruba Device Tracker: track_new set to %s", value)
 
     async def _enable_all_tracker_entities(self) -> None:
         """Enable every device_tracker entity registered under this config entry."""
@@ -130,12 +132,12 @@ class ArubaCleanupSwitch(SwitchEntity):
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:trash-can-outline"
+    _attr_translation_key = "cleanup_enabled"
 
-    def __init__(self, entry: ConfigEntry) -> None:
+    def __init__(self, entry: ArubaConfigEntry) -> None:
         """Initialise the cleanup-enabled switch."""
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_cleanup_enabled"
-        self._attr_name = "Auto-Remove Stale Devices"
         self._attr_device_info = get_device_info(entry)
 
     @property

@@ -10,17 +10,21 @@ A custom integration for Home Assistant that tracks devices connected to an Arub
 ## Features
 
 - **Device Tracker** — marks devices home/away based on Wi-Fi association
-- **Extra attributes per device:**
+- **Extra attributes per device** — while the device is **home**:
   - `MAC` — Client MAC address
   - `Host name` — Client hostname
+  - `ip` — current IP address (standard Home Assistant tracker attribute)
   - `access_point` — which AP the device is connected to
   - `essid` — the SSID/network name
   - `ip_address` — current IP address
   - `os` — operating system detected by the IAP
   - `channel` — Wi-Fi channel
-  - `signal` — signal strength
-  - `speed` — link speed
+
+  ...and while the device is **away**:
+  - `last_seen` — when the IAP last saw it (survives restarts)
+  - `days_until_cleanup` — days left before auto-removal, if enabled
 - **Config Flow** — set up entirely from the HA UI, no YAML required
+- **Re-authentication** — if the IAP rejects the stored credentials (e.g. the password was rotated), Home Assistant prompts you to re-enter them instead of failing silently
 - **Track new devices toggle** — choose whether newly discovered devices are tracked by default (off by default)
 - **Configurable poll interval** — how often the IAP is queried (default 30s, range 10–300s)
 - **Auto-remove stale devices** — automatically remove entities for devices not seen for a configurable number of days
@@ -59,6 +63,7 @@ Instant AP# commit apply
    - **IP Address** — your IAP or Virtual Controller IP (e.g. `192.168.1.10`)
    - **Username** — IAP admin username
    - **Password** — IAP admin password
+   - **Verify SSL certificate** — leave **off** (the default) unless you have installed a trusted certificate on the IAP; Instant APs ship with a self-signed certificate that cannot be verified
 4. **Step 2 — Tracking & Polling:**
    - **Track new devices by default** — when on, newly discovered devices are immediately tracked; when off, their entities are created but disabled until you enable them manually
    - **Poll interval** — how often the IAP is queried in seconds (default 30s)
@@ -67,7 +72,9 @@ Instant AP# commit apply
 
 ## Options
 
-All settings are editable after setup via **Configure** on the integration card, including IP address and credentials. Changing the IP or credentials will trigger a reconnection test before saving.
+All settings are editable after setup via **Configure** on the integration card, including IP address and credentials. Changing the IP, credentials, or the certificate-verification setting will trigger a reconnection test before saving.
+
+The password field is not pre-filled — leave it blank to keep the stored password.
 
 The poll interval, track new devices toggle, and stale device cleanup settings are also available as entities on the IAP device card for quick changes without opening the options flow.
 
@@ -77,7 +84,7 @@ Go to **Settings → Devices & Services → Entities**, find the device tracker 
 
 ## Auto-Remove Stale Devices
 
-When enabled, device tracker entities that have not been seen for the configured number of days are automatically removed after each poll cycle. The last-seen timestamp for each device is stored persistently and survives HA restarts.
+When enabled, device tracker entities that have not been seen for the configured number of days are automatically removed. The check runs at startup and roughly hourly thereafter. The last-seen timestamp for each device is stored persistently and survives HA restarts.
 
 - **Auto-Remove Stale Devices** switch — enable or disable the feature
 - **Auto-Remove Stale Devices After** number — days threshold (1–365, default 30)
@@ -86,6 +93,22 @@ Both are configurable during setup, via the options flow, or directly on the IAP
 
 > [!NOTE]
 > Auto-remove defaults to **on** with a 30-day threshold. Devices are only removed if they haven't appeared in any poll result for the full threshold period. If a device reconnects, its last-seen timestamp resets and the countdown starts again.
+
+## Recorder Database Size
+
+Home Assistant writes a row to the recorder database whenever an entity's state **or any of its attributes** changes. A device tracker's state (`home`/`not_home`) changes rarely, so attributes are what drive database growth — and an attribute that ticks on every poll costs one row per device per poll. At the default 30-second interval that is ~2,880 rows per day per device.
+
+This integration is designed so that a device sitting still costs **nothing**:
+
+- **`signal` and `speed` are not exposed.** The IAP reports both and they are still parsed (they show up in debug logs), but their values change almost continuously, making them pure database churn. See the note below if you were using them.
+- **`last_seen` and `days_until_cleanup` are only published while a device is away.** For a connected device "last seen" is always ~now, so it changed every poll while telling you nothing the `home` state didn't already.
+
+What remains — `access_point`, `essid`, `ip_address`, `os`, `channel` — only changes when something actually changes: the device roams to another AP, gets a new IP, or switches band. So a device that stays connected to the same AP writes one row when it arrives and one when it leaves.
+
+No `recorder:` configuration is needed. If you still want to trim history further, raising the poll interval reduces how quickly arrivals and departures are detected but does not otherwise affect row volume, since rows are now driven by real changes rather than by polling.
+
+> [!IMPORTANT]
+> **Breaking change in 2.0.0:** the `signal` and `speed` attributes were removed, and `last_seen` / `days_until_cleanup` are no longer present while a device is home. If you have automations or templates reading `state_attr('device_tracker.x', 'signal')` or reading `last_seen` on a home device, they will now return `None`. For "how long has this device been home", use the entity's built-in `last_changed` instead.
 
 ## Default Away Timer Behaviour
 

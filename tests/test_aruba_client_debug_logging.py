@@ -2,6 +2,9 @@
 
 import re
 
+import pytest
+
+from custom_components.aruba_device_tracker.aruba_client import ArubaConnectionError
 from tests.conftest import LOGIN_URL, show_cmd_url
 
 
@@ -59,7 +62,15 @@ class TestBadResponseDebugLogging:
         assert match is not None
         assert len(match.group(1).strip("'")) == 300
 
-    def test_login_bad_response_also_logs_debug(self, client, requests_mock, caplog):
+    def test_login_bad_response_body_is_never_logged(
+        self, client, requests_mock, caplog
+    ):
+        """
+        The /login body is the auth response, so it must not be logged.
+
+        Other endpoints get a body snippet for diagnostics; login deliberately
+        does not, even at DEBUG level.
+        """
         requests_mock.post(
             LOGIN_URL,
             text="not json at all",
@@ -67,12 +78,11 @@ class TestBadResponseDebugLogging:
             headers={"Content-Length": "16"},
         )
 
-        with caplog.at_level("DEBUG"):
-            result = client.login()
+        with caplog.at_level("DEBUG"), pytest.raises(ArubaConnectionError):
+            client.login()
 
-        assert result is False
-        assert "content-length header=16" in caplog.text
-        assert "not json at all" in caplog.text
+        assert "bad response debug" not in caplog.text
+        assert "not json at all" not in caplog.text
 
     def test_healthy_response_does_not_trigger_debug_log(
         self, logged_in_client, requests_mock, caplog

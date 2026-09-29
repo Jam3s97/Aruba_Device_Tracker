@@ -1,7 +1,15 @@
 """Tests for the legacy TLS renegotiation fallback (issue #41)."""
 
+import ssl
+
+import pytest
 from requests.exceptions import SSLError
 
+from custom_components.aruba_device_tracker.aruba_client import (
+    ArubaCertificateError,
+    ArubaConnectionError,
+    _LegacyTLSAdapter,
+)
 from tests.conftest import LOGIN_URL, show_cmd_url
 
 _LEGACY_MARKER = "UNSAFE_LEGACY_RENEGOTIATION_DISABLED"
@@ -23,9 +31,8 @@ class TestLegacyTLSFallback:
             ],
         )
 
-        result = client.login()
+        client.login()
 
-        assert result is True
         assert client._sid == "abc123"
         assert client._legacy_ssl is True
 
@@ -52,14 +59,28 @@ class TestLegacyTLSFallback:
     ):
         requests_mock.post(
             LOGIN_URL,
+            exc=SSLError("[SSL: SSLV3_ALERT_HANDSHAKE_FAILURE] handshake failure"),
+        )
+
+        with pytest.raises(ArubaConnectionError):
+            client.login()
+
+        assert client._legacy_ssl is False
+
+    def test_cert_verify_failure_is_not_mistaken_for_legacy_renegotiation(
+        self, client, requests_mock
+    ):
+        requests_mock.post(
+            LOGIN_URL,
             exc=SSLError(
-                "certificate verify failed: unable to get local issuer certificate"
+                "[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: "
+                "unable to get local issuer certificate"
             ),
         )
 
-        result = client.login()
+        with pytest.raises(ArubaCertificateError):
+            client.login()
 
-        assert result is False
         assert client._legacy_ssl is False
 
     def test_legacy_flag_prevents_repeated_retry_loop(self, client, requests_mock):
@@ -72,9 +93,8 @@ class TestLegacyTLSFallback:
             ),
         )
 
-        result = client.login()
-
-        assert result is False
+        with pytest.raises(ArubaConnectionError):
+            client.login()
 
     def test_subsequent_calls_after_fallback_dont_reattempt_normal_path(
         self, client, requests_mock
@@ -90,7 +110,7 @@ class TestLegacyTLSFallback:
                 {"json": {"Status": "Success", "sid": "abc123"}},
             ],
         )
-        assert client.login() is True
+        client.login()
         assert client._legacy_ssl is True
 
         requests_mock.get(
@@ -99,3 +119,35 @@ class TestLegacyTLSFallback:
         )
 
         assert client.get_clients() == {}
+
+
+class TestLegacyAdapterVerification:
+    """The adapter relaxes renegotiation only — not certificate verification."""
+
+    def test_unverified_adapter_disables_cert_checks(self):
+        adapter = _LegacyTLSAdapter(verify_ssl=False)
+
+        assert adapter._ssl_context.check_hostname is False
+        assert adapter._ssl_context.verify_mode is ssl.CERT_NONE
+
+    def test_verifying_adapter_keeps_cert_checks(self):
+        adapter = _LegacyTLSAdapter(verify_ssl=True)
+
+        assert adapter._ssl_context.check_hostname is True
+        assert adapter._ssl_context.verify_mode is ssl.CERT_REQUIRED
+
+    def test_legacy_renegotiation_flag_set_in_both_modes(self):
+        flag = getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0x4)
+
+        for verify in (True, False):
+            adapter = _LegacyTLSAdapter(verify_ssl=verify)
+            assert adapter._ssl_context.options & flag
+
+    def test_fallback_honours_client_verify_setting(self, client):
+        client.verify_ssl = True
+
+        client._enable_legacy_ssl()
+
+        adapter = client._session.get_adapter("https://example.invalid")
+        assert isinstance(adapter, _LegacyTLSAdapter)
+        assert adapter._ssl_context.verify_mode is ssl.CERT_REQUIRED

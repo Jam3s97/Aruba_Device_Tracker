@@ -30,8 +30,14 @@ max-complexity = 25
     "S101",    # assert is how pytest works
     "SLF001",  # tests intentionally inspect private state
     "ANN001",  # fixture args (requests_mock, caplog, etc.) don't need annotations
+    "ANN002",  # *args on fake/stub signatures don't need annotations
+    "ANN003",  # **kwargs on fake/stub signatures don't need annotations
     "ANN201",  # test functions don't need return type annotations
+    "ANN202",  # nested helpers/stubs don't need return type annotations
     "D101",    # test classes don't need docstrings
     "D102",    # test methods don't need docstrings
+    "D107",    # fake __init__ methods don't need docstrings
+    "EM101",   # raising a literal is fine when provoking an error path
+    "TRY003",  # ditto: test doubles don't need exception message classes
     "PLR2004", # magic values are fine in test assertions
 ]
