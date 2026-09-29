@@ -4,6 +4,9 @@ A custom integration for Home Assistant that tracks devices connected to an Arub
 
 > **Disclaimer:** This is an unofficial integration and is not affiliated with or endorsed by Aruba Networks. Use at your own risk.
 
+> [!NOTE]
+> This is a modern replacement for Home Assistant's built-in `aruba` integration, which is deprecated and polls Instant APs over SSH. This integration instead uses the IAP's local REST API (config flow, no YAML, no SSH).
+
 ## Features
 
 - **Device Tracker** — marks devices home/away based on Wi-Fi association
