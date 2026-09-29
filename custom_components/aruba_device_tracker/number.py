@@ -21,18 +21,17 @@ from .const import (
 from .utils import get_device_info
 
 if TYPE_CHECKING:
-    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from . import ArubaIAPCoordinator
+    from . import ArubaConfigEntry
 
 LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,  # noqa: ARG001
-    entry: ConfigEntry,
+    entry: ArubaConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up number entities for the IAP control device."""
@@ -59,12 +58,12 @@ class ArubaPollIntervalNumber(NumberEntity):
     _attr_native_max_value = MAX_SCAN_INTERVAL
     _attr_native_step = 5
     _attr_native_unit_of_measurement = "s"
+    _attr_translation_key = "poll_interval"
 
-    def __init__(self, entry: ConfigEntry) -> None:
+    def __init__(self, entry: ArubaConfigEntry) -> None:
         """Initialise the poll interval entity."""
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_poll_interval"
-        self._attr_name = "Poll Interval"
         self._attr_device_info = get_device_info(entry)
 
     @property
@@ -80,7 +79,7 @@ class ArubaPollIntervalNumber(NumberEntity):
         new_options = {**self._entry.options, CONF_SCAN_INTERVAL: int(value)}
         self.hass.config_entries.async_update_entry(self._entry, options=new_options)
 
-        coordinator: ArubaIAPCoordinator = self._entry.runtime_data
+        coordinator = self._entry.runtime_data
         coordinator.update_interval = timedelta(seconds=int(value))
         self.async_write_ha_state()
 
@@ -106,12 +105,12 @@ class ArubaCleanupDaysNumber(NumberEntity):
     _attr_native_max_value = MAX_CLEANUP_DAYS
     _attr_native_step = 1
     _attr_native_unit_of_measurement = "d"
+    _attr_translation_key = "cleanup_days"
 
-    def __init__(self, entry: ConfigEntry) -> None:
+    def __init__(self, entry: ArubaConfigEntry) -> None:
         """Initialise the cleanup days entity."""
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_cleanup_days"
-        self._attr_name = "Auto-Remove Stale Devices After"
         self._attr_device_info = get_device_info(entry)
 
     @property

@@ -9,8 +9,9 @@
   "integration_type": "hub",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/Jam3s97/Aruba_Device_Tracker/issues",
-  "requirements": [
-    "requests>=2.28.0"
+  "loggers": [
+    "custom_components.aruba_device_tracker"
   ],
-  "version": "1.4.0"
+  "requirements": [],
+  "version": "2.0.0"
 }

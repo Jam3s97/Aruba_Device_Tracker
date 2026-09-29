@@ -17,7 +17,13 @@ LOGOUT_URL = f"{BASE_URL}/logout"
 
 
 def show_cmd_url(sid: str, cmd: str = "show%20clients") -> str:
-    """Build the show-cmd URL the client will actually request."""
+    """
+    Build the show-cmd URL the client will actually request.
+
+    The client builds its query string with ``urlencode(..., quote_via=quote)``,
+    so spaces arrive as ``%20`` rather than ``+``. requests_mock matches on
+    path plus query parameters, not on literal string order.
+    """
     return f"{BASE_URL}/show-cmd?iap_ip_addr={AP_HOST}&cmd={cmd}&sid={sid}"
 
 
@@ -45,5 +51,6 @@ def client():
 def logged_in_client(client, requests_mock):
     """Return a client that has already completed a successful login()."""
     requests_mock.post(LOGIN_URL, json={"Status": "Success", "sid": "fake-sid-123"})
-    assert client.login() is True
+    client.login()
+    assert client._sid == "fake-sid-123"
     return client

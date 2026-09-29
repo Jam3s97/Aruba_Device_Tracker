@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.components.device_tracker import ScannerEntity, SourceType
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device_registry import format_mac
 
 from .const import (
     ATTR_ACCESS_POINT,
@@ -19,25 +18,26 @@ from .const import (
     ATTR_IP_ADDRESS,
     ATTR_LAST_SEEN,
     ATTR_OS,
-    ATTR_SIGNAL,
-    ATTR_SPEED,
     CONF_TRACK_NEW,
     DEFAULT_TRACK_NEW,
 )
 
 if TYPE_CHECKING:
-    from homeassistant.config_entries import ConfigEntry
+    from collections.abc import Iterable
+
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from . import ArubaIAPCoordinator
+    from . import ArubaConfigEntry, ArubaIAPCoordinator
 
 LOGGER = logging.getLogger(__name__)
+
+SECONDS_PER_DAY = 86400
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: ArubaConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """
@@ -49,11 +49,11 @@ async def async_setup_entry(
     waiting for the next poll, which is what prevents the 'no longer provided'
     banner.
 
-    Unique IDs use the bare MAC address — the same convention as HA's own
+    Unique IDs are the bare MAC address — the same convention as HA's own
     nmap_tracker — so the entity platform can correctly match registry entries
     to entity objects across restarts.
     """
-    coordinator: ArubaIAPCoordinator = entry.runtime_data
+    coordinator = entry.runtime_data
     tracked: set[str] = set()
 
     track_new: bool = entry.options.get(
@@ -74,45 +74,36 @@ async def async_setup_entry(
             if stored_name:
                 registry_names[reg_entry.unique_id] = stored_name
 
+    @callback
+    def _new_entities_for(macs: Iterable[str]) -> list[ArubaClientEntity]:
+        """Build entities for any of `macs` not already tracked."""
+        entities: list[ArubaClientEntity] = []
+        for mac in macs:
+            if mac in tracked:
+                continue
+            tracked.add(mac)
+            client_data = (coordinator.data or {}).get(mac) or {}
+            # Prefer: live IAP name -> registry stored name -> bare MAC
+            initial_name = client_data.get("name") or registry_names.get(mac) or mac
+            entities.append(
+                ArubaClientEntity(
+                    coordinator=coordinator,
+                    mac=mac,
+                    initial_name=initial_name,
+                    new_device_defaults_tracked=track_new,
+                )
+            )
+        return entities
+
     # ------------------------------------------------------------------
     # Seed from coordinator.last_seen — every MAC ever seen by this
     # integration, including currently offline devices.  This is populated
     # from persistent storage before first_refresh runs, so it's always
-    # available here.
+    # available here.  Online MACs not yet in last_seen (brand new devices on
+    # this very first poll) are picked up by the second loop.
     # ------------------------------------------------------------------
-    startup_entities: list[ArubaClientEntity] = []
-
-    for mac in coordinator.last_seen:
-        if mac not in tracked:
-            tracked.add(mac)
-            client_data = (coordinator.data or {}).get(mac, {})
-            # Prefer: live IAP name → registry stored name → bare MAC
-            initial_name = client_data.get("name") or registry_names.get(mac) or mac
-            startup_entities.append(
-                ArubaClientEntity(
-                    coordinator=coordinator,
-                    entry=entry,
-                    mac=mac,
-                    initial_name=initial_name,
-                    new_device_defaults_tracked=track_new,
-                )
-            )
-
-    # Also catch any online devices not yet in last_seen (brand new devices
-    # on this very first poll).
-    for mac, client_data in (coordinator.data or {}).items():
-        if mac not in tracked:
-            tracked.add(mac)
-            initial_name = client_data.get("name") or registry_names.get(mac) or mac
-            startup_entities.append(
-                ArubaClientEntity(
-                    coordinator=coordinator,
-                    entry=entry,
-                    mac=mac,
-                    initial_name=initial_name,
-                    new_device_defaults_tracked=track_new,
-                )
-            )
+    startup_entities = _new_entities_for(coordinator.last_seen)
+    startup_entities.extend(_new_entities_for(coordinator.data or {}))
 
     if startup_entities:
         async_add_entities(startup_entities)
@@ -124,23 +115,24 @@ async def async_setup_entry(
     def _add_new_entities() -> None:
         if not coordinator.data:
             return
-        new_entities: list[ArubaClientEntity] = []
-        for mac, client_data in coordinator.data.items():
-            if mac not in tracked:
-                tracked.add(mac)
-                new_entities.append(
-                    ArubaClientEntity(
-                        coordinator=coordinator,
-                        entry=entry,
-                        mac=mac,
-                        initial_name=client_data.get("name") or mac,
-                        new_device_defaults_tracked=track_new,
-                    )
-                )
+        new_entities = _new_entities_for(coordinator.data)
         if new_entities:
             async_add_entities(new_entities)
 
-    coordinator.async_add_listener(_add_new_entities)
+    entry.async_on_unload(coordinator.async_add_listener(_add_new_entities))
+
+    @callback
+    def _forget_removed(macs: set[str]) -> None:
+        """
+        Drop cleaned-up MACs from the tracked set.
+
+        Without this, a device removed by stale-device cleanup would stay in
+        `tracked` forever, so if it ever reconnected no entity would be created
+        for it until Home Assistant restarted.
+        """
+        tracked.difference_update(macs)
+
+    entry.async_on_unload(coordinator.async_add_removal_listener(_forget_removed))
 
 
 class ArubaClientEntity(ScannerEntity):
@@ -151,7 +143,6 @@ class ArubaClientEntity(ScannerEntity):
     def __init__(
         self,
         coordinator: ArubaIAPCoordinator,
-        entry: ConfigEntry,
         mac: str,
         initial_name: str,
         new_device_defaults_tracked: bool,  # noqa: FBT001
@@ -159,12 +150,12 @@ class ArubaClientEntity(ScannerEntity):
         """Initialise the tracker entity."""
         super().__init__()
         self._coordinator = coordinator
-        self._entry = entry
         self._mac = mac
         self._attr_name = initial_name
-        # Unique ID uses format_mac-normalised MAC (lowercase colon-separated)
-        # per HA unique ID requirements.
-        self._attr_unique_id = format_mac(mac)
+        # No _attr_unique_id here: ScannerEntity overrides `unique_id` as a
+        # property returning `mac_address`, and never consults _attr_unique_id.
+        # The MAC arrives already format_mac-normalised (lowercase, colon
+        # separated) from ArubaIAPClient.get_clients.
         self._new_device_defaults_tracked = new_device_defaults_tracked
         # Set initial connected state synchronously from coordinator data
         # (first_refresh has already completed before async_setup_entry runs).
@@ -185,6 +176,11 @@ class ArubaClientEntity(ScannerEntity):
         self.async_write_ha_state()
 
     @property
+    def _client_data(self) -> dict[str, Any] | None:
+        """Return this device's live IAP data, or None when it is away."""
+        return (self._coordinator.data or {}).get(self._mac)
+
+    @property
     def source_type(self) -> SourceType:
         """Return the source type."""
         return SourceType.ROUTER
@@ -202,10 +198,19 @@ class ArubaClientEntity(ScannerEntity):
     @property
     def hostname(self) -> str | None:
         """Return the hostname reported by the IAP."""
-        if self._coordinator.data is None:
-            return None
-        data = self._coordinator.data.get(self._mac)
+        data = self._client_data
         return data.get("name") if data else None
+
+    @property
+    def ip_address(self) -> str | None:
+        """
+        Return the current IP address reported by the IAP.
+
+        ScannerEntity surfaces this as the standard `ip` state attribute and
+        uses it to register the device with HA's MAC/IP discovery helpers.
+        """
+        data = self._client_data
+        return data.get("ip") if data else None
 
     @property
     def available(self) -> bool:
@@ -214,43 +219,61 @@ class ArubaClientEntity(ScannerEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return additional state attributes from the IAP."""
+        """
+        Return additional state attributes from the IAP.
+
+        Every attribute here is chosen to be *stable* for as long as the
+        device's situation doesn't change. Home Assistant writes a recorder
+        row whenever the state or any attribute differs from the previous
+        one, so an attribute that ticks on every poll costs one database row
+        per device per poll — ~2,880/day/device at the default 30s interval.
+        Two consequences:
+
+        - `signal` and `speed` are not published at all. The IAP reports
+          them and the client still parses them, but they change almost
+          continuously, so they were pure recorder churn.
+        - `last_seen` / `days_until_cleanup` are published only while the
+          device is **away**. For a connected device "last seen" is by
+          definition ~now, so it carried no information the `home` state
+          didn't already convey, while changing on every single poll.
+        """
         attrs: dict[str, Any] = {}
 
-        # Last-seen / cleanup countdown — sourced from persistent storage,
-        # so these survive restarts unlike the state's last_changed. Populated
-        # whether the device is currently online or away.
-        last_seen_iso = self._coordinator.last_seen.get(self._mac)
-        if last_seen_iso is not None:
-            attrs[ATTR_LAST_SEEN] = last_seen_iso
-            if self._coordinator.cleanup_enabled:
-                try:
-                    last_seen_dt = datetime.fromisoformat(last_seen_iso)
-                except ValueError:
-                    last_seen_dt = None
-                if last_seen_dt is not None:
-                    cleanup_at = last_seen_dt + timedelta(
-                        days=self._coordinator.cleanup_days
-                    )
-                    remaining = cleanup_at - datetime.now(tz=UTC)
-                    attrs[ATTR_DAYS_UNTIL_CLEANUP] = max(
-                        0, round(remaining.total_seconds() / 86400)
-                    )
+        if self._connected:
+            # Live IAP session details. ATTR_IP_ADDRESS duplicates
+            # ScannerEntity's standard `ip` attribute; it is kept for
+            # backwards compatibility with existing automations and the
+            # documented attribute list.
+            data = self._client_data
+            if data:
+                attrs.update(
+                    {
+                        ATTR_ACCESS_POINT: data.get("access_point"),
+                        ATTR_ESSID: data.get("essid"),
+                        ATTR_IP_ADDRESS: data.get("ip"),
+                        ATTR_OS: data.get("os"),
+                        ATTR_CHANNEL: data.get("channel"),
+                    }
+                )
+            return attrs
 
-        # Live IAP session details — only available while the device is
-        # actually connected.
-        data = (self._coordinator.data or {}).get(self._mac)
-        if data:
-            attrs.update(
-                {
-                    ATTR_ACCESS_POINT: data.get("access_point"),
-                    ATTR_ESSID: data.get("essid"),
-                    ATTR_IP_ADDRESS: data.get("ip"),
-                    ATTR_OS: data.get("os"),
-                    ATTR_CHANNEL: data.get("channel"),
-                    ATTR_SIGNAL: data.get("signal"),
-                    ATTR_SPEED: data.get("speed"),
-                }
+        # Away: the last-seen timestamp is frozen, so it is both meaningful
+        # and stable. Sourced from persistent storage, so it survives
+        # restarts unlike the state's last_changed.
+        last_seen_iso = self._coordinator.last_seen.get(self._mac)
+        if last_seen_iso is None:
+            return attrs
+
+        attrs[ATTR_LAST_SEEN] = last_seen_iso
+        if self._coordinator.cleanup_enabled:
+            try:
+                last_seen_dt = datetime.fromisoformat(last_seen_iso)
+            except ValueError:
+                return attrs
+            cleanup_at = last_seen_dt + timedelta(days=self._coordinator.cleanup_days)
+            remaining = cleanup_at - datetime.now(tz=UTC)
+            attrs[ATTR_DAYS_UNTIL_CLEANUP] = max(
+                0, round(remaining.total_seconds() / SECONDS_PER_DAY)
             )
 
         return attrs

@@ -5,62 +5,105 @@
         "title": "Aruba Device Tracker",
         "description": "Enter the connection details for your Aruba Instant AP.\n\nMake sure REST API is enabled on the IAP.",
         "data": {
-          "host": "IP Address",
+          "host": "IP address",
           "username": "Username",
-          "password": "Password"
+          "password": "Password",
+          "verify_ssl": "Verify SSL certificate"
         },
         "data_description": {
-          "host": "IP address of your Aruba IAP or Virtual Controller (e.g. 192.168.1.10)"
+          "host": "IP address of your Aruba IAP or Virtual Controller (e.g. 192.168.1.10)",
+          "verify_ssl": "Leave off unless you have installed a trusted certificate on the IAP. Instant APs ship with a self-signed certificate that cannot be verified."
         }
       },
       "tracking": {
-        "title": "Tracking & Polling",
-        "description": "**Track new devices by default?**\n\n- **On** — new devices are automatically tracked as soon as they are discovered.\n- **Off** — new devices are discovered but their tracker entities will be **disabled** in HA. You can enable them individually in Settings → Devices & Services.\n\nHow often to query the IAP for connected clients. Min 10s, max 300s.\n\nBoth settings can be changed at any time.",
+        "title": "Tracking & polling",
+        "description": "Configure how devices are tracked and how often the IAP is polled.\n\nAll settings can be changed at any time via the integration options.",
         "data": {
           "track_new_devices": "Track new devices by default",
-          "scan_interval": "Poll interval (seconds)"
+          "scan_interval": "Poll interval (seconds)",
+          "cleanup_enabled": "Auto-remove stale devices",
+          "cleanup_days": "Auto-remove stale devices after (days)"
         },
         "data_description": {
-          "scan_interval": "How often to query the IAP for connected clients. Min 10s, max 300s."
+          "track_new_devices": "When off, new devices are discovered but their entities are disabled until you enable them manually.",
+          "scan_interval": "How often to query the IAP for connected clients. Min 10s, max 300s.",
+          "cleanup_enabled": "Automatically remove devices not seen for the configured number of days.",
+          "cleanup_days": "Number of days without activity before a device entity is removed."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate with your Aruba IAP",
+        "description": "The Aruba IAP at {host} rejected the stored credentials. Enter the current username and password to reconnect.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
         }
       }
     },
     "error": {
       "cannot_connect": "Cannot reach the Aruba IAP. Check the IP address, confirm the device is online, and that REST API is enabled with 'allow-rest-api'.",
+      "invalid_cert": "The AP's certificate could not be verified. Aruba Instant APs ship a self-signed certificate, so either install a certificate your Home Assistant host trusts, or turn off 'Verify SSL certificate'.",
       "invalid_auth": "Login failed. Check the username and password.",
       "api_access_denied": "Login succeeded but the account cannot run API commands. Ensure the user has full management privileges, not read-only.",
       "unknown": "Unexpected error. Check the Home Assistant logs for details."
     },
     "abort": {
-      "already_configured": "This Aruba IAP is already configured."
+      "already_configured": "This Aruba IAP is already configured.",
+      "reauth_successful": "Re-authentication was successful."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Aruba IAP Settings",
-        "description": "Update connection details or change tracking and polling preferences.\n\nIf you change the IP address, username, or password the connection will be tested before saving.",
+        "title": "Aruba IAP settings",
+        "description": "Update connection details or change tracking and polling preferences.\n\nIf you change the IP address, username, password, or certificate verification, the connection will be tested before saving.",
         "data": {
-          "host": "IP Address",
+          "host": "IP address",
           "username": "Username",
           "password": "Password",
+          "verify_ssl": "Verify SSL certificate",
           "track_new_devices": "Track new devices by default",
-          "scan_interval": "Poll interval (seconds)"
+          "scan_interval": "Poll interval (seconds)",
+          "cleanup_enabled": "Auto-remove stale devices",
+          "cleanup_days": "Auto-remove stale devices after (days)"
         },
         "data_description": {
+          "password": "Leave blank to keep the stored password.",
+          "verify_ssl": "Leave off unless you have installed a trusted certificate on the IAP. Instant APs ship with a self-signed certificate that cannot be verified.",
           "track_new_devices": "When off, new devices are discovered but their entities are disabled until you enable them manually.",
-          "scan_interval": "How often to query the IAP for connected clients. Min 10s, max 300s."
+          "scan_interval": "How often to query the IAP for connected clients. Min 10s, max 300s.",
+          "cleanup_enabled": "Automatically remove devices not seen for the configured number of days.",
+          "cleanup_days": "Number of days without activity before a device entity is removed."
         }
       }
     },
     "error": {
       "cannot_connect": "Cannot reach the Aruba IAP at the new address. Check the IP and try again.",
+      "invalid_cert": "The AP's certificate could not be verified, so 'Verify SSL certificate' was not enabled. Aruba Instant APs ship a self-signed certificate — install a certificate your Home Assistant host trusts, or leave verification off.",
       "invalid_auth": "Login failed with the new credentials.",
       "api_access_denied": "Login succeeded but the account cannot run API commands. Use a full-privilege management account.",
       "unknown": "Unexpected error. Check the Home Assistant logs."
     },
     "abort": {
       "reconfigure_successful": "Settings saved."
+    }
+  },
+  "entity": {
+    "switch": {
+      "track_new_devices": {
+        "name": "Track new devices"
+      },
+      "cleanup_enabled": {
+        "name": "Auto-remove stale devices"
+      }
+    },
+    "number": {
+      "poll_interval": {
+        "name": "Poll interval"
+      },
+      "cleanup_days": {
+        "name": "Auto-remove stale devices after"
+      }
     }
   }
 }
