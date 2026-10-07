@@ -47,7 +47,10 @@ Instant AP# commit apply
 ## Installation
 
 ### HACS (recommended)
-1. Add this repository as a custom repository in HACS
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Jam3s97&repository=Aruba_Device_Tracker&category=integration)
+
+1. Click the button above, or add this repository as a custom repository in HACS manually (category: **Integration**)
 2. Search for **Aruba Device Tracker** and install
 3. Restart Home Assistant
 
@@ -57,7 +60,9 @@ Instant AP# commit apply
 
 ## Setup
 
-1. Go to **Settings → Devices & Services → Add Integration**
+[![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=aruba_device_tracker)
+
+1. Click the button above, or go to **Settings → Devices & Services → Add Integration**
 2. Search for **Aruba Device Tracker**
 3. **Step 1 — Connection:**
    - **IP Address** — your IAP or Virtual Controller IP (e.g. `192.168.1.10`)
