@@ -270,6 +270,14 @@ class TestUpdateData:
 
         assert asyncio.run(coordinator._async_update_data()) == {MAC: {"name": "TV"}}
 
+    def test_none_result_on_first_refresh_fails_instead_of_marking_all_away(self):
+        # No last-known data yet: returning {} would flip every restored
+        # device to away, so the first refresh must fail and be retried.
+        coordinator = make_coordinator(get_clients=lambda: None)
+
+        with pytest.raises(UpdateFailed):
+            asyncio.run(coordinator._async_update_data())
+
     def test_auth_error_becomes_config_entry_auth_failed(self):
         def _boom():
             raise ArubaAuthError("bad creds")

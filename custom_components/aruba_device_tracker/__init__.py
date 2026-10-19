@@ -116,7 +116,14 @@ async def async_setup_entry(
     # logic has accurate timestamps from the moment HA starts.
     await coordinator.async_load_last_seen()
 
-    await coordinator.async_config_entry_first_refresh()
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except Exception:
+        # Setup is about to fail, so async_unload_entry will never run. Release
+        # the AP session here, or every ConfigEntryNotReady retry leaks one.
+        await hass.async_add_executor_job(client.logout)
+        await hass.async_add_executor_job(client.close)
+        raise
 
     entry.runtime_data = coordinator
 
@@ -290,10 +297,17 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
             raise UpdateFailed(msg) from err
 
         if result is None:
+            if self.data is None:
+                # First refresh, so there is no last-known data to keep.
+                # Returning {} would flip every restored device to away for a
+                # poll, firing "left home" automations on an AP hiccup. Fail
+                # instead, so setup retries via ConfigEntryNotReady.
+                msg = "The Aruba IAP did not return a client list"
+                raise UpdateFailed(msg)
             LOGGER.warning(
                 "Aruba IAP get_clients returned None — keeping last known data"
             )
-            return self.data or {}
+            return self.data
 
         # Update last-seen timestamps for every device currently online. MACs
         # are already format_mac-normalised by the client.
