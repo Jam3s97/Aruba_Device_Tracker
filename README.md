@@ -78,11 +78,15 @@ Instant AP# commit apply
 
 ## Options
 
-All settings are editable after setup via **Configure** on the integration card, including IP address and credentials. Changing the IP, credentials, or the certificate-verification setting will trigger a reconnection test before saving.
+Tracking and polling settings (track new devices, poll interval, stale device cleanup) are editable after setup via **Configure** on the integration card. They take effect immediately, without a reload.
+
+The poll interval, track new devices toggle, and stale device cleanup settings are also available as entities on the IAP device card for quick changes without opening **Configure**.
+
+## Changing the IP Address or Credentials
+
+To change the IP address, username, password, or certificate verification, open the integration card's **⋮** menu and choose **Reconfigure**. The connection is tested before anything is saved, then the integration reloads.
 
 The password field is not pre-filled — leave it blank to keep the stored password.
-
-The poll interval, track new devices toggle, and stale device cleanup settings are also available as entities on the IAP device card for quick changes without opening the options flow.
 
 ## Renaming Devices
 
@@ -95,7 +99,7 @@ When enabled, device tracker entities that have not been seen for the configured
 - **Auto-Remove Stale Devices** switch — enable or disable the feature
 - **Auto-Remove Stale Devices After** number — days threshold (1–365, default 30)
 
-Both are configurable during setup, via the options flow, or directly on the IAP device card.
+Both are configurable during setup, via **Configure**, or directly on the IAP device card.
 
 > [!NOTE]
 > Auto-remove defaults to **on** with a 30-day threshold. Devices are only removed if they haven't appeared in any poll result for the full threshold period. If a device reconnects, its last-seen timestamp resets and the countdown starts again.

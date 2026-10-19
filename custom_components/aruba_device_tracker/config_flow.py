@@ -249,6 +249,79 @@ class ArubaIAPConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Change the AP's address, credentials or certificate verification."""
+        errors: dict[str, str] = {}
+        entry = self._get_reconfigure_entry()
+
+        if user_input is not None:
+            host = user_input[CONF_HOST].strip()
+            username = user_input[CONF_USERNAME].strip()
+            # The password is deliberately not pre-filled into the form, so a
+            # blank submission means "keep the stored password".
+            password = user_input.get(CONF_PASSWORD) or entry.data[CONF_PASSWORD]
+            verify_ssl = user_input[CONF_VERIFY_SSL]
+
+            if host != entry.unique_id:
+                await self.async_set_unique_id(host)
+                self._abort_if_unique_id_configured()
+
+            error_key = await _test_connection(
+                self.hass, host, username, password, verify_ssl=verify_ssl
+            )
+            if error_key:
+                errors["base"] = error_key
+            else:
+                return self.async_update_reload_and_abort(
+                    entry,
+                    unique_id=host,
+                    title=f"Aruba IAP ({host})",
+                    data_updates={
+                        CONF_HOST: host,
+                        CONF_USERNAME: username,
+                        CONF_PASSWORD: password,
+                        CONF_VERIFY_SSL: verify_ssl,
+                    },
+                    # verify_ssl now lives in data with the other connection
+                    # settings. Older versions' options flow stored it in
+                    # options, which _option() reads first, so a stale copy
+                    # there would silently override the new value.
+                    options={
+                        key: value
+                        for key, value in entry.options.items()
+                        if key != CONF_VERIFY_SSL
+                    },
+                )
+
+        # Prefill from the entry, then from whatever was just submitted, so a
+        # failed connection test doesn't wipe the user's edits.
+        current = {
+            **entry.data,
+            CONF_VERIFY_SSL: entry.options.get(
+                CONF_VERIFY_SSL, entry.data.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+            ),
+            **(user_input or {}),
+        }
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_HOST, default=current.get(CONF_HOST, "")): str,
+                    vol.Required(
+                        CONF_USERNAME, default=current.get(CONF_USERNAME, "")
+                    ): str,
+                    vol.Optional(CONF_PASSWORD): PASSWORD_SELECTOR,
+                    vol.Optional(
+                        CONF_VERIFY_SSL, default=current[CONF_VERIFY_SSL]
+                    ): bool,
+                }
+            ),
+            description_placeholders={"host": entry.data.get(CONF_HOST, "")},
+            errors=errors,
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(
@@ -259,111 +332,38 @@ class ArubaIAPConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class ArubaIAPOptionsFlow(config_entries.OptionsFlow):
-    """Options flow — change host/credentials/tracking/polling after setup."""
+    """
+    Options flow — tracking and polling preferences.
+
+    Connection details (host, credentials, certificate verification) are
+    changed through the reconfigure flow instead, which tests the connection
+    and reloads the entry.
+    """
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Manage the options form."""
-        errors: dict[str, str] = {}
-        current = self.config_entry.data
-        current_options = self.config_entry.options
+        """Manage the tracking and polling options."""
+        entry = self.config_entry
 
         def _current(key: str, default: Any) -> Any:
-            return current_options.get(key, current.get(key, default))
+            return entry.options.get(key, entry.data.get(key, default))
 
         if user_input is not None:
-            host = user_input[CONF_HOST].strip()
-            username = user_input[CONF_USERNAME].strip()
-            # The password is deliberately not pre-filled into the form, so a
-            # blank submission means "keep the stored password".
-            password = user_input.get(CONF_PASSWORD) or current.get(CONF_PASSWORD, "")
-            verify_ssl = user_input[CONF_VERIFY_SSL]
-            track_new = user_input[CONF_TRACK_NEW]
-            scan_interval = user_input[CONF_SCAN_INTERVAL]
-            cleanup_enabled = user_input[CONF_CLEANUP_ENABLED]
-            cleanup_days = user_input[CONF_CLEANUP_DAYS]
-
-            connection_changed = (
-                host != current.get(CONF_HOST)
-                or username != current.get(CONF_USERNAME)
-                or password != current.get(CONF_PASSWORD)
-                or verify_ssl != _current(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
-            )
-
-            if connection_changed:
-                error_key = await _test_connection(
-                    self.hass, host, username, password, verify_ssl=verify_ssl
+            # Nothing reloads the entry on an options change (see the note in
+            # async_setup_entry), so a new poll interval is applied live here.
+            if entry.state is config_entries.ConfigEntryState.LOADED:
+                entry.runtime_data.update_interval = timedelta(
+                    seconds=user_input[CONF_SCAN_INTERVAL]
                 )
-                if error_key:
-                    errors["base"] = error_key
-
-            if not errors:
-                # data holds connection fields only; options holds everything
-                # runtime-changeable. Options here are written via async_update_entry
-                # directly rather than via the return self.async_create_entry(...)
-                # auto-options mechanism, so both dicts land in one call. Keeping
-                # data scoped to connection fields (instead of also duplicating
-                # track_new/scan_interval/cleanup into it, as before) avoids a
-                # stale, unused copy of those settings sitting in entry.data.
-                old_scan_interval = _current(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-
-                data_update = {
-                    CONF_HOST: host,
-                    CONF_USERNAME: username,
-                    CONF_PASSWORD: password,
-                }
-                options_update = {
-                    CONF_VERIFY_SSL: verify_ssl,
-                    CONF_TRACK_NEW: track_new,
-                    CONF_SCAN_INTERVAL: scan_interval,
-                    CONF_CLEANUP_ENABLED: cleanup_enabled,
-                    CONF_CLEANUP_DAYS: cleanup_days,
-                }
-
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    data=data_update,
-                    options=options_update,
-                )
-
-                LOGGER.debug(
-                    "Aruba Device Tracker options updated via options form: "
-                    "track_new=%s, scan_interval=%ds, cleanup_enabled=%s, "
-                    "cleanup_days=%d, verify_ssl=%s",
-                    track_new,
-                    scan_interval,
-                    cleanup_enabled,
-                    cleanup_days,
-                    verify_ssl,
-                )
-
-                if connection_changed:
-                    self.hass.async_create_task(
-                        self.hass.config_entries.async_reload(
-                            self.config_entry.entry_id
-                        )
-                    )
-                elif scan_interval != old_scan_interval:
-                    coordinator = self.config_entry.runtime_data
-                    if coordinator is not None:
-                        coordinator.update_interval = timedelta(seconds=scan_interval)
-
-                return self.async_abort(reason="reconfigure_successful")
+            # Merge rather than replace: options can hold keys this form does
+            # not show, such as a verify_ssl written by older versions.
+            return self.async_create_entry(data={**entry.options, **user_input})
 
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_HOST, default=current.get(CONF_HOST, "")): str,
-                    vol.Required(
-                        CONF_USERNAME, default=current.get(CONF_USERNAME, "")
-                    ): str,
-                    vol.Optional(CONF_PASSWORD): PASSWORD_SELECTOR,
-                    vol.Optional(
-                        CONF_VERIFY_SSL,
-                        default=_current(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL),
-                    ): bool,
                     vol.Optional(
                         CONF_TRACK_NEW,
                         default=_current(CONF_TRACK_NEW, DEFAULT_TRACK_NEW),
@@ -386,5 +386,4 @@ class ArubaIAPOptionsFlow(config_entries.OptionsFlow):
                     ),
                 }
             ),
-            errors=errors,
         )
