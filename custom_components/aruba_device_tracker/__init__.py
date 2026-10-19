@@ -44,6 +44,7 @@ from .const import (
     STORAGE_VERSION,
     UNAVAILABLE_AFTER_FAILED_POLLS,
 )
+from .utils import tracker_unique_id
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -146,6 +147,35 @@ async def async_setup_entry(
     # causes the banner "entity no longer provided" because the switch and
     # number entities write to options on state changes, which fires the
     # listener and tears down the platform while tracker entities are live.
+
+    return True
+
+
+async def async_migrate_entry(
+    hass: HomeAssistant,
+    entry: ArubaConfigEntry,
+) -> bool:
+    """Migrate an older config entry to the current version."""
+    if entry.version > 1:
+        # Written by a newer major version; nothing here can read it.
+        return False
+
+    if entry.minor_version < 2:  # noqa: PLR2004
+        # Tracker unique IDs were the bare MAC. Rewrite them in place so
+        # entity IDs, names, history and customisations all carry over.
+        @callback
+        def _scope_tracker_unique_id(
+            reg_entry: er.RegistryEntry,
+        ) -> dict[str, str] | None:
+            if reg_entry.domain != "device_tracker":
+                return None
+            return {
+                "new_unique_id": tracker_unique_id(entry.entry_id, reg_entry.unique_id)
+            }
+
+        await er.async_migrate_entries(hass, entry.entry_id, _scope_tracker_unique_id)
+        hass.config_entries.async_update_entry(entry, minor_version=2)
+        LOGGER.debug("Migrated config entry %s to version 1.2", entry.entry_id)
 
     return True
 
@@ -393,16 +423,15 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
             if last_seen_dt >= threshold:
                 continue
 
-            # Device is stale — find and remove its entity registry entry.
-            entity_id = registry.async_get_entity_id("device_tracker", DOMAIN, mac)
+            # Device is stale — find and remove its entity registry entry. The
+            # unique ID is entry-scoped, so another AP's entity for the same
+            # MAC can never match here.
+            entity_id = registry.async_get_entity_id(
+                "device_tracker",
+                DOMAIN,
+                tracker_unique_id(self.config_entry.entry_id, mac),
+            )
             if entity_id is not None:
-                reg_entry = registry.async_get(entity_id)
-                # async_get_entity_id is not scoped to a config entry, so with
-                # two APs configured it can return the *other* entry's entity.
-                if reg_entry is None or (
-                    reg_entry.config_entry_id != self.config_entry.entry_id
-                ):
-                    continue
                 registry.async_remove(entity_id)
                 LOGGER.info(
                     "Aruba Device Tracker: removed stale device %s (%s)"

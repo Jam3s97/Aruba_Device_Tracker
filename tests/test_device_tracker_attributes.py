@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 from custom_components.aruba_device_tracker.const import (
     ATTR_ACCESS_POINT,
@@ -13,6 +14,7 @@ from custom_components.aruba_device_tracker.const import (
 from custom_components.aruba_device_tracker.device_tracker import ArubaClientEntity
 
 TEST_MAC = "aa:bb:cc:dd:ee:ff"
+TEST_ENTRY_ID = "entry-a"
 
 
 @dataclass
@@ -24,6 +26,9 @@ class FakeCoordinator:
     cleanup_enabled: bool = True
     cleanup_days: int = 30
     last_update_success: bool = True
+    config_entry: SimpleNamespace = field(
+        default_factory=lambda: SimpleNamespace(entry_id=TEST_ENTRY_ID)
+    )
 
 
 def make_entity(coordinator: FakeCoordinator, mac: str = TEST_MAC) -> ArubaClientEntity:
@@ -220,13 +225,23 @@ class TestScannerEntityContract:
         assert entity.ip_address is None
         assert entity.hostname is None
 
-    def test_unique_id_is_the_mac_not_attr_unique_id(self):
-        """ScannerEntity derives unique_id from mac_address, not _attr_unique_id."""
-        coordinator = FakeCoordinator(data=None, last_seen={})
-        entity = make_entity(coordinator)
+    def test_unique_id_is_scoped_to_the_config_entry(self):
+        """The unique ID is entry-scoped; mac_address stays the bare MAC."""
+        entity = make_entity(FakeCoordinator(data=None, last_seen={}))
 
-        assert entity.unique_id == TEST_MAC
+        assert entity.unique_id == f"{TEST_ENTRY_ID}_{TEST_MAC}"
+        # mac_address is what links the tracker to other integrations' devices.
         assert entity.mac_address == TEST_MAC
+
+    def test_two_aps_seeing_one_device_get_distinct_unique_ids(self):
+        """Bare-MAC IDs made the second AP's entity a dropped duplicate."""
+        first = make_entity(FakeCoordinator())
+        second = make_entity(
+            FakeCoordinator(config_entry=SimpleNamespace(entry_id="entry-b"))
+        )
+
+        assert first.unique_id != second.unique_id
+        assert first.mac_address == second.mac_address == TEST_MAC
 
 
 class TestAvailability:

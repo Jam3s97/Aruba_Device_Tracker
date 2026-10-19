@@ -26,6 +26,7 @@ from custom_components.aruba_device_tracker.aruba_client import (
 from custom_components.aruba_device_tracker.const import (
     UNAVAILABLE_AFTER_FAILED_POLLS,
 )
+from custom_components.aruba_device_tracker.utils import tracker_unique_id
 
 ENTRY_ID = "entry-a"
 OTHER_ENTRY_ID = "entry-b"
@@ -47,24 +48,25 @@ class FakeStore:
 
 
 class FakeRegistry:
-    """Minimal entity registry covering the three methods cleanup uses."""
+    """Minimal entity registry covering the two methods cleanup uses."""
 
     def __init__(self, entities: dict[str, str]) -> None:
-        # unique_id -> owning config entry id
-        self._entities = dict(entities)
+        # MAC -> owning config entry id, held under the entry-scoped unique ID
+        # the real registry stores.
+        self._unique_ids: set[str] = set()
         self.removed: list[str] = []
+        for mac, owner in entities.items():
+            self.add(mac, owner)
+
+    def add(self, mac: str, owner: str) -> None:
+        self._unique_ids.add(tracker_unique_id(owner, mac))
 
     def async_get_entity_id(self, domain, platform, unique_id):  # noqa: ARG002
-        return f"device_tracker.{unique_id}" if unique_id in self._entities else None
-
-    def async_get(self, entity_id):
-        unique_id = entity_id.removeprefix("device_tracker.")
-        owner = self._entities.get(unique_id)
-        return None if owner is None else SimpleNamespace(config_entry_id=owner)
+        return f"device_tracker.{unique_id}" if unique_id in self._unique_ids else None
 
     def async_remove(self, entity_id) -> None:
         self.removed.append(entity_id)
-        self._entities.pop(entity_id.removeprefix("device_tracker."), None)
+        self._unique_ids.discard(entity_id.removeprefix("device_tracker."))
 
 
 def make_coordinator(
@@ -128,7 +130,9 @@ class TestCleanupRemoval:
 
         run_cleanup(coordinator)
 
-        assert coordinator.hass.registry.removed == [f"device_tracker.{MAC}"]
+        assert coordinator.hass.registry.removed == [
+            f"device_tracker.{tracker_unique_id(ENTRY_ID, MAC)}"
+        ]
         assert MAC not in coordinator.last_seen
 
     def test_fresh_device_is_kept(self):
@@ -165,18 +169,18 @@ class TestCleanupRemoval:
         assert coordinator.hass.registry.removed == []
         assert MAC in coordinator.last_seen
 
-    def test_other_entry_entity_is_not_touched(self):
-        """async_get_entity_id is not entry-scoped, so ownership must be checked."""
-        coordinator = make_coordinator(
-            last_seen={MAC: iso_ago(40)},
-            registry=FakeRegistry({MAC: OTHER_ENTRY_ID}),
-        )
+    def test_other_entry_entity_for_the_same_mac_is_not_touched(self):
+        """Two APs seeing one device each own an entity; only ours is removed."""
+        registry = FakeRegistry({MAC: OTHER_ENTRY_ID})
+        registry.add(MAC, ENTRY_ID)
+        coordinator = make_coordinator(last_seen={MAC: iso_ago(40)}, registry=registry)
 
         run_cleanup(coordinator)
 
-        assert coordinator.hass.registry.removed == []
-        # The MAC stays in our map too: it is not ours to forget.
-        assert MAC in coordinator.last_seen
+        assert registry.removed == [
+            f"device_tracker.{tracker_unique_id(ENTRY_ID, MAC)}"
+        ]
+        assert tracker_unique_id(OTHER_ENTRY_ID, MAC) in registry._unique_ids
 
 
 class TestCleanupThrottling:
@@ -191,7 +195,7 @@ class TestCleanupThrottling:
 
         # Re-add a stale record; an immediate second pass must not act on it.
         coordinator.last_seen["aa:bb:cc:dd:ee:03"] = iso_ago(40)
-        coordinator.hass.registry._entities["aa:bb:cc:dd:ee:03"] = ENTRY_ID
+        coordinator.hass.registry.add("aa:bb:cc:dd:ee:03", ENTRY_ID)
         run_cleanup(coordinator)
 
         assert coordinator.hass.registry.removed == first_pass
@@ -205,7 +209,7 @@ class TestCleanupThrottling:
         run_cleanup(coordinator)
 
         coordinator.last_seen["aa:bb:cc:dd:ee:03"] = iso_ago(40)
-        coordinator.hass.registry._entities["aa:bb:cc:dd:ee:03"] = ENTRY_ID
+        coordinator.hass.registry.add("aa:bb:cc:dd:ee:03", ENTRY_ID)
         run_cleanup(coordinator, force=True)
 
         assert "aa:bb:cc:dd:ee:03" not in coordinator.last_seen
