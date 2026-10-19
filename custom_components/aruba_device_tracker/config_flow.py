@@ -97,6 +97,9 @@ class ArubaIAPConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Aruba Device Tracker."""
 
     VERSION = 1
+    # 1.2: device_tracker unique IDs scoped per config entry (see
+    # async_migrate_entry in __init__.py).
+    MINOR_VERSION = 2
 
     # Populated by async_step_user and consumed by async_step_tracking. Declared
     # here so reaching step two out of order fails cleanly rather than with an

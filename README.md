@@ -88,6 +88,12 @@ To change the IP address, username, password, or certificate verification, open 
 
 The password field is not pre-filled — leave it blank to keep the stored password.
 
+## Multiple Clusters or Standalone APs
+
+One config entry covers a whole Instant cluster: add the Virtual Controller's IP once, and devices roaming between APs in that cluster stay a single tracker.
+
+If you also run a separate cluster or a standalone AP, add it as its own entry. A device seen by both gets one tracker per entry (for example `device_tracker.phone` and `device_tracker.phone_2`). Rename them to tell them apart, e.g. "Phone (Workshop)". To get a single home/away answer, add both trackers to the same [person](https://www.home-assistant.io/integrations/person/): a person is home if any of their network trackers is home.
+
 ## Renaming Devices
 
 Go to **Settings → Devices & Services → Entities**, find the device tracker entity, click it, then click the pencil icon to give it a friendly name. This is stored in the HA entity registry and persists across restarts.

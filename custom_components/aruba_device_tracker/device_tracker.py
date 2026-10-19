@@ -21,6 +21,7 @@ from .const import (
     CONF_TRACK_NEW,
     DEFAULT_TRACK_NEW,
 )
+from .utils import tracker_unique_id
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -49,9 +50,10 @@ async def async_setup_entry(
     waiting for the next poll, which is what prevents the 'no longer provided'
     banner.
 
-    Unique IDs are the bare MAC address — the same convention as HA's own
-    nmap_tracker — so the entity platform can correctly match registry entries
-    to entity objects across restarts.
+    Unique IDs are the MAC scoped to this config entry (utils.tracker_unique_id),
+    so a device seen by two separate AP entries gets one entity per AP rather
+    than the second being dropped as a duplicate. A person entity combines
+    them: it is home if any of its router trackers is home.
     """
     coordinator = entry.runtime_data
     tracked: set[str] = set()
@@ -61,15 +63,14 @@ async def async_setup_entry(
         entry.data.get(CONF_TRACK_NEW, DEFAULT_TRACK_NEW),
     )
 
-    # Build a mac -> registry name lookup so offline devices keep their
+    # Build a unique_id -> registry name lookup so offline devices keep their
     # friendly name (e.g. "iPad") rather than falling back to the raw MAC.
     # The entity registry stores the original_name set at creation time and
-    # any user-customised name, keyed by unique_id (bare MAC for our entities).
+    # any user-customised name, keyed by unique_id (utils.tracker_unique_id).
     registry = er.async_get(hass)
     registry_names: dict[str, str] = {}
     for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
         if reg_entry.domain == "device_tracker":
-            # unique_id is the bare MAC for our entities
             stored_name = reg_entry.name or reg_entry.original_name
             if stored_name:
                 registry_names[reg_entry.unique_id] = stored_name
@@ -84,7 +85,11 @@ async def async_setup_entry(
             tracked.add(mac)
             client_data = (coordinator.data or {}).get(mac) or {}
             # Prefer: live IAP name -> registry stored name -> bare MAC
-            initial_name = client_data.get("name") or registry_names.get(mac) or mac
+            initial_name = (
+                client_data.get("name")
+                or registry_names.get(tracker_unique_id(entry.entry_id, mac))
+                or mac
+            )
             entities.append(
                 ArubaClientEntity(
                     coordinator=coordinator,
@@ -152,8 +157,6 @@ class ArubaClientEntity(ScannerEntity):
         self._coordinator = coordinator
         self._mac = mac
         self._attr_name = initial_name
-        # No _attr_unique_id here: ScannerEntity overrides `unique_id` as a
-        # property returning `mac_address`, and never consults _attr_unique_id.
         # The MAC arrives already format_mac-normalised (lowercase, colon
         # separated) from ArubaIAPClient.get_clients.
         self._new_device_defaults_tracked = new_device_defaults_tracked
@@ -189,6 +192,17 @@ class ArubaClientEntity(ScannerEntity):
     def is_connected(self) -> bool:
         """Return True if the device is currently seen by the IAP."""
         return self._connected
+
+    @property
+    def unique_id(self) -> str:
+        """
+        Return the entry-scoped unique ID.
+
+        Overridden because ScannerEntity returns the bare MAC, which collides
+        when two AP entries see the same device. Linking to another
+        integration's device still goes through mac_address.
+        """
+        return tracker_unique_id(self._coordinator.config_entry.entry_id, self._mac)
 
     @property
     def mac_address(self) -> str:
