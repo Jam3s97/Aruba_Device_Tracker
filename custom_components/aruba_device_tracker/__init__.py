@@ -136,10 +136,11 @@ async def async_setup_entry(
     # on/off, cleanup days) are applied live by their respective entity
     # handlers without needing a full integration reload.
     #
-    # A reload IS required when credentials or host change, but that is
-    # handled inside the options flow itself (config_flow.py) which calls
-    # async_update_entry on the data dict and then triggers a reload via
-    # the normal config-entries reload mechanism — not via update_listener.
+    # A reload IS required when the host, credentials or certificate
+    # verification change, but those live in the reconfigure flow
+    # (config_flow.py), which reloads via async_update_reload_and_abort —
+    # not via update_listener. The options flow applies a new poll
+    # interval to the coordinator directly.
     #
     # Registering an update_listener that reloads on every options write
     # causes the banner "entity no longer provided" because the switch and

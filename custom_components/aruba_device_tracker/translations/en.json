@@ -38,6 +38,21 @@
           "username": "Username",
           "password": "Password"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure your Aruba IAP",
+        "description": "Update the connection details for the Aruba IAP at {host}. The connection is tested before saving, then the integration reloads.",
+        "data": {
+          "host": "IP address",
+          "username": "Username",
+          "password": "Password",
+          "verify_ssl": "Verify SSL certificate"
+        },
+        "data_description": {
+          "host": "IP address of your Aruba IAP or Virtual Controller (e.g. 192.168.1.10)",
+          "password": "Leave blank to keep the stored password.",
+          "verify_ssl": "Leave off unless you have installed a trusted certificate on the IAP. Instant APs ship with a self-signed certificate that cannot be verified."
+        }
       }
     },
     "error": {
@@ -49,43 +64,28 @@
     },
     "abort": {
       "already_configured": "This Aruba IAP is already configured.",
-      "reauth_successful": "Re-authentication was successful."
+      "reauth_successful": "Re-authentication was successful.",
+      "reconfigure_successful": "Settings saved. The integration has reloaded with the new connection details."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Aruba IAP settings",
-        "description": "Update connection details or change tracking and polling preferences.\n\nIf you change the IP address, username, password, or certificate verification, the connection will be tested before saving.",
+        "description": "Change how devices are tracked and how often the IAP is polled.\n\nTo change the IP address, credentials, or certificate verification, use **Reconfigure** on the integration instead.",
         "data": {
-          "host": "IP address",
-          "username": "Username",
-          "password": "Password",
-          "verify_ssl": "Verify SSL certificate",
           "track_new_devices": "Track new devices by default",
           "scan_interval": "Poll interval (seconds)",
           "cleanup_enabled": "Auto-remove stale devices",
           "cleanup_days": "Auto-remove stale devices after (days)"
         },
         "data_description": {
-          "password": "Leave blank to keep the stored password.",
-          "verify_ssl": "Leave off unless you have installed a trusted certificate on the IAP. Instant APs ship with a self-signed certificate that cannot be verified.",
           "track_new_devices": "When off, new devices are discovered but their entities are disabled until you enable them manually.",
           "scan_interval": "How often to query the IAP for connected clients. Min 10s, max 300s.",
           "cleanup_enabled": "Automatically remove devices not seen for the configured number of days.",
           "cleanup_days": "Number of days without activity before a device entity is removed."
         }
       }
-    },
-    "error": {
-      "cannot_connect": "Cannot reach the Aruba IAP at the new address. Check the IP and try again.",
-      "invalid_cert": "The AP's certificate could not be verified, so 'Verify SSL certificate' was not enabled. Aruba Instant APs ship a self-signed certificate — install a certificate your Home Assistant host trusts, or leave verification off.",
-      "invalid_auth": "Login failed with the new credentials.",
-      "api_access_denied": "Login succeeded but the account cannot run API commands. Use a full-privilege management account.",
-      "unknown": "Unexpected error. Check the Home Assistant logs."
-    },
-    "abort": {
-      "reconfigure_successful": "Settings saved."
     }
   },
   "entity": {
