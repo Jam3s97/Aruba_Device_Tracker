@@ -42,6 +42,7 @@ from .const import (
     LEGACY_STORAGE_KEY,
     STORAGE_SAVE_DELAY,
     STORAGE_VERSION,
+    UNAVAILABLE_AFTER_FAILED_POLLS,
 )
 
 if TYPE_CHECKING:
@@ -191,6 +192,7 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
         # MAC -> ISO-format UTC timestamp string
         self.last_seen: dict[str, str] = {}
         self._last_cleanup: datetime | None = None
+        self._failed_polls = 0
         self._removal_listeners: list[Callable[[set[str]], None]] = []
 
     # ------------------------------------------------------------------
@@ -304,10 +306,24 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
                 # instead, so setup retries via ConfigEntryNotReady.
                 msg = "The Aruba IAP did not return a client list"
                 raise UpdateFailed(msg)
-            LOGGER.warning(
-                "Aruba IAP get_clients returned None — keeping last known data"
+            # A blip keeps last-known data. A sustained failure raises, so the
+            # coordinator logs the outage once (and the recovery once) and the
+            # trackers go unavailable rather than showing stale state forever.
+            self._failed_polls += 1
+            if self._failed_polls >= UNAVAILABLE_AFTER_FAILED_POLLS:
+                msg = (
+                    "The Aruba IAP has not returned a client list for "
+                    f"{UNAVAILABLE_AFTER_FAILED_POLLS} consecutive polls"
+                )
+                raise UpdateFailed(msg)
+            LOGGER.debug(
+                "Aruba IAP get_clients returned None (%d/%d) — keeping last known data",
+                self._failed_polls,
+                UNAVAILABLE_AFTER_FAILED_POLLS,
             )
             return self.data
+
+        self._failed_polls = 0
 
         # Update last-seen timestamps for every device currently online. MACs
         # are already format_mac-normalised by the client.

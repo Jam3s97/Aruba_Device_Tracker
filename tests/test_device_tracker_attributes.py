@@ -23,6 +23,7 @@ class FakeCoordinator:
     last_seen: dict[str, str] = field(default_factory=dict)
     cleanup_enabled: bool = True
     cleanup_days: int = 30
+    last_update_success: bool = True
 
 
 def make_entity(coordinator: FakeCoordinator, mac: str = TEST_MAC) -> ArubaClientEntity:
@@ -226,3 +227,20 @@ class TestScannerEntityContract:
 
         assert entity.unique_id == TEST_MAC
         assert entity.mac_address == TEST_MAC
+
+
+class TestAvailability:
+    def test_away_device_is_available_while_the_ap_answers(self):
+        """A device missing from the client list is away, not unavailable."""
+        entity = make_entity(FakeCoordinator(data={}))
+
+        assert entity.available is True
+        assert entity.is_connected is False
+
+    def test_unavailable_once_the_coordinator_stops_succeeding(self):
+        """A sustained AP outage hides last-known state instead of showing it."""
+        entity = make_entity(
+            FakeCoordinator(data={TEST_MAC: {"name": "x"}}, last_update_success=False)
+        )
+
+        assert entity.available is False

@@ -30,6 +30,7 @@ A custom integration for Home Assistant that tracks devices connected to an Arub
 - **Auto-remove stale devices** — automatically remove entities for devices not seen for a configurable number of days
 - **Friendly name renaming** — rename any device via the HA entity registry
 - **Offline devices stay away** — devices that are away when HA restarts correctly restore their away state; no unavailable flash or "entity no longer provided" warnings
+- **AP outages show as unavailable** — a single failed poll is ignored and the last known state is kept. If the IAP fails to answer 3 polls in a row, trackers become `unavailable` (rather than showing stale home/away) until it responds again. The outage and the recovery are each logged once. A device that has simply left is always `not_home`, never `unavailable`
 
 ## Requirements
 

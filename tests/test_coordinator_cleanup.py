@@ -23,6 +23,9 @@ from custom_components.aruba_device_tracker.aruba_client import (
     ArubaAuthError,
     ArubaConnectionError,
 )
+from custom_components.aruba_device_tracker.const import (
+    UNAVAILABLE_AFTER_FAILED_POLLS,
+)
 
 ENTRY_ID = "entry-a"
 OTHER_ENTRY_ID = "entry-b"
@@ -82,6 +85,7 @@ def make_coordinator(
     coordinator.last_seen = dict(last_seen or {})
     coordinator._store = FakeStore()
     coordinator._last_cleanup = None
+    coordinator._failed_polls = 0
     coordinator._removal_listeners = []
     coordinator.data = None
     coordinator.client = SimpleNamespace(get_clients=get_clients)
@@ -277,6 +281,35 @@ class TestUpdateData:
 
         with pytest.raises(UpdateFailed):
             asyncio.run(coordinator._async_update_data())
+
+    def test_sustained_failure_raises_on_the_third_poll(self):
+        coordinator = make_coordinator(get_clients=lambda: None)
+        coordinator.data = {MAC: {"name": "TV"}}
+
+        # Blips keep last-known data...
+        for _ in range(UNAVAILABLE_AFTER_FAILED_POLLS - 1):
+            assert asyncio.run(coordinator._async_update_data()) == {
+                MAC: {"name": "TV"}
+            }
+
+        # ...but a sustained outage fails, so the trackers go unavailable.
+        with pytest.raises(UpdateFailed):
+            asyncio.run(coordinator._async_update_data())
+        # And keeps failing until the AP answers again.
+        with pytest.raises(UpdateFailed):
+            asyncio.run(coordinator._async_update_data())
+
+    def test_successful_poll_resets_the_failure_count(self):
+        responses = iter([None, None, {MAC: {"name": "TV"}}, None, None])
+        coordinator = make_coordinator(get_clients=lambda: next(responses))
+        coordinator.data = {MAC: {"name": "TV"}}
+
+        # Two failures, a success, then two more failures: never three in a
+        # row, so none of these polls may raise.
+        for _ in range(5):
+            assert asyncio.run(coordinator._async_update_data()) == {
+                MAC: {"name": "TV"}
+            }
 
     def test_auth_error_becomes_config_entry_auth_failed(self):
         def _boom():
