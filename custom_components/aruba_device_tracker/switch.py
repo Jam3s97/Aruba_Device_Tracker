@@ -127,7 +127,7 @@ class ArubaCleanupSwitch(SwitchEntity):
     days (set via the 'Cleanup After Days' number entity) will have their
     tracker entity and entity registry entry removed automatically.
 
-    Defaults to OFF so no data is deleted without explicit opt-in.
+    Defaults to ON (30 days); the config flow offers it as an opt-out.
     """
 
     _attr_has_entity_name = True
