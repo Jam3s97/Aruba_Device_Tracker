@@ -49,5 +49,10 @@ LEGACY_STORAGE_KEY = f"{DOMAIN}.last_seen"
 # Coalesce last-seen writes instead of rewriting the file on every poll.
 STORAGE_SAVE_DELAY = 60  # seconds
 
+# A failed poll keeps last-known data, so a single blip is invisible. This many
+# failures in a row means the AP is genuinely down: the coordinator then raises
+# UpdateFailed and the trackers go unavailable until a poll succeeds.
+UNAVAILABLE_AFTER_FAILED_POLLS = 3
+
 # Stale-device cleanup measures staleness in days, so hourly is ample.
 CLEANUP_INTERVAL_HOURS = 1

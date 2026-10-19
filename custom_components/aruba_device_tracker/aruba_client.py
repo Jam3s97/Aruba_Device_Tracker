@@ -423,7 +423,10 @@ class ArubaIAPClient:
                 # A genuine bug rather than an AP hiccup — keep the traceback.
                 _LOGGER.exception("Aruba IAP show-cmd '%s' failed unexpectedly", cmd)
             else:
-                _LOGGER.warning(
+                # Debug, not warning: this fires every poll during an outage.
+                # The coordinator logs a sustained failure once, and recovery
+                # once, so a warning here would only repeat that every poll.
+                _LOGGER.debug(
                     "Aruba IAP %s running cmd '%s' — will retry next poll",
                     reason,
                     cmd,

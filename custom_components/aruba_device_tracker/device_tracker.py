@@ -214,8 +214,15 @@ class ArubaClientEntity(ScannerEntity):
 
     @property
     def available(self) -> bool:
-        """Always available — offline devices show as away, not unavailable."""
-        return True
+        """
+        Return whether the IAP is answering.
+
+        A device missing from the client list is away, never unavailable.
+        Unavailable is reserved for "the AP itself can't be read": after
+        UNAVAILABLE_AFTER_FAILED_POLLS failed polls the coordinator stops
+        reporting success, and last-known state is no longer trustworthy.
+        """
+        return self._coordinator.last_update_success
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
