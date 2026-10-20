@@ -82,6 +82,8 @@ Tracking and polling settings (track new devices, poll interval, stale device cl
 
 The poll interval, track new devices toggle, and stale device cleanup settings are also available as entities on the IAP device card for quick changes without opening **Configure**.
 
+Turning the **Track new devices** switch on also enables the trackers that were created disabled while it was off. Trackers you disabled yourself stay disabled.
+
 ## Changing the IP Address or Credentials
 
 To change the IP address, username, password, or certificate verification, open the integration card's **⋮** menu and choose **Reconfigure**. The connection is tested before anything is saved, then the integration reloads.

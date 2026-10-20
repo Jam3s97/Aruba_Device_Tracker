@@ -131,11 +131,14 @@ async def async_setup_entry(
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # NOTE: No update_listener / async_reload_entry registered here.
+    # NOTE: No reloading update_listener / async_reload_entry registered here.
     #
     # All runtime-changeable settings (poll interval, track_new, cleanup
-    # on/off, cleanup days) are applied live by their respective entity
-    # handlers without needing a full integration reload.
+    # on/off, cleanup days) are applied live without a reload: the poll
+    # interval is pushed to the coordinator, and the rest are read from
+    # entry.options at the moment they are used. The switch and number
+    # entities do register update listeners (entity.ArubaOptionsEntity), but
+    # those only redraw the entity, never reload.
     #
     # A reload IS required when the host, credentials or certificate
     # verification change, but those live in the reconfigure flow

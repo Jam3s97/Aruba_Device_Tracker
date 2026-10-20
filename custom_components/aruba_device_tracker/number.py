@@ -18,6 +18,7 @@ from .const import (
     MIN_CLEANUP_DAYS,
     MIN_SCAN_INTERVAL,
 )
+from .entity import ArubaOptionsEntity
 from .utils import get_device_info
 
 if TYPE_CHECKING:
@@ -48,7 +49,7 @@ async def async_setup_entry(
 # ---------------------------------------------------------------------------
 
 
-class ArubaPollIntervalNumber(NumberEntity):
+class ArubaPollIntervalNumber(ArubaOptionsEntity, NumberEntity):
     """Number entity to configure how often the IAP is polled."""
 
     _attr_has_entity_name = True
@@ -91,7 +92,7 @@ class ArubaPollIntervalNumber(NumberEntity):
 # ---------------------------------------------------------------------------
 
 
-class ArubaCleanupDaysNumber(NumberEntity):
+class ArubaCleanupDaysNumber(ArubaOptionsEntity, NumberEntity):
     """
     Number entity to configure how many days before a device is considered stale.
 

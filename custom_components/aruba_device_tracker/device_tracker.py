@@ -58,11 +58,6 @@ async def async_setup_entry(
     coordinator = entry.runtime_data
     tracked: set[str] = set()
 
-    track_new: bool = entry.options.get(
-        CONF_TRACK_NEW,
-        entry.data.get(CONF_TRACK_NEW, DEFAULT_TRACK_NEW),
-    )
-
     # Build a unique_id -> registry name lookup so offline devices keep their
     # friendly name (e.g. "iPad") rather than falling back to the raw MAC.
     # The entity registry stores the original_name set at creation time and
@@ -78,6 +73,12 @@ async def async_setup_entry(
     @callback
     def _new_entities_for(macs: Iterable[str]) -> list[ArubaClientEntity]:
         """Build entities for any of `macs` not already tracked."""
+        # Read on every call rather than once at setup: the switch and
+        # Configure both change this at runtime, without a reload.
+        track_new: bool = entry.options.get(
+            CONF_TRACK_NEW,
+            entry.data.get(CONF_TRACK_NEW, DEFAULT_TRACK_NEW),
+        )
         entities: list[ArubaClientEntity] = []
         for mac in macs:
             if mac in tracked:

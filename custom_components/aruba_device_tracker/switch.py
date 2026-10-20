@@ -14,6 +14,7 @@ from .const import (
     DEFAULT_CLEANUP_ENABLED,
     DEFAULT_TRACK_NEW,
 )
+from .entity import ArubaOptionsEntity
 from .utils import get_device_info
 
 if TYPE_CHECKING:
@@ -44,13 +45,13 @@ async def async_setup_entry(
 # ---------------------------------------------------------------------------
 
 
-class ArubaTrackNewSwitch(SwitchEntity):
+class ArubaTrackNewSwitch(ArubaOptionsEntity, SwitchEntity):
     """
     Toggle whether newly discovered devices are tracked by default.
 
-    When turned ON it also enables all previously disabled tracker entities
-    belonging to this integration entry, so devices discovered while the
-    switch was off are not left permanently hidden.
+    When turned ON it also enables the tracker entities this integration
+    disabled, so devices discovered while the switch was off are not left
+    permanently hidden. Trackers the user disabled by hand stay disabled.
     """
 
     _attr_has_entity_name = True
@@ -72,7 +73,7 @@ class ArubaTrackNewSwitch(SwitchEntity):
         )
 
     async def async_turn_on(self, **kwargs: Any) -> None:  # noqa: ARG002
-        """Enable tracking and enable all previously disabled tracker entities."""
+        """Enable tracking and the trackers this integration disabled."""
         await self._set(value=True)
         await self._enable_all_tracker_entities()
 
@@ -88,14 +89,21 @@ class ArubaTrackNewSwitch(SwitchEntity):
         LOGGER.debug("Aruba Device Tracker: track_new set to %s", value)
 
     async def _enable_all_tracker_entities(self) -> None:
-        """Enable every device_tracker entity registered under this config entry."""
+        """
+        Enable this entry's trackers that were disabled by the integration.
+
+        Only RegistryEntryDisabler.INTEGRATION is ours: that is what HA records
+        when entity_registry_enabled_default was False. USER means the user hid
+        the tracker on purpose, and DEVICE / CONFIG_ENTRY follow a parent that
+        is itself disabled, so none of those are touched.
+        """
         registry = er.async_get(self.hass)
         enabled_count = 0
 
         for entity in er.async_entries_for_config_entry(registry, self._entry.entry_id):
             if entity.domain != "device_tracker":
                 continue
-            if entity.disabled_by is not None:
+            if entity.disabled_by is er.RegistryEntryDisabler.INTEGRATION:
                 registry.async_update_entity(
                     entity.entity_id,
                     disabled_by=None,
@@ -110,7 +118,7 @@ class ArubaTrackNewSwitch(SwitchEntity):
         else:
             LOGGER.debug(
                 "Aruba Device Tracker: track_new turned on"
-                " — no disabled tracker entities found"
+                " — no integration-disabled tracker entities found"
             )
 
 
@@ -119,7 +127,7 @@ class ArubaTrackNewSwitch(SwitchEntity):
 # ---------------------------------------------------------------------------
 
 
-class ArubaCleanupSwitch(SwitchEntity):
+class ArubaCleanupSwitch(ArubaOptionsEntity, SwitchEntity):
     """
     Toggle automatic removal of stale device tracker entities.
 
