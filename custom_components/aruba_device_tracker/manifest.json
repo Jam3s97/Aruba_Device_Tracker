@@ -4,9 +4,6 @@
   "codeowners": [
     "@Jam3s97"
   ],
-  "categories": [
-    "presence_location.network_presence"
-  ],
   "config_flow": true,
   "documentation": "https://github.com/Jam3s97/Aruba_Device_Tracker",
   "integration_type": "hub",
