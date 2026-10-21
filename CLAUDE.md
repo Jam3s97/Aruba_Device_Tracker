@@ -19,6 +19,10 @@ Run a single test: `python -m pytest tests/test_aruba_client.py::test_name -v`
 
 Linting is `ruff` with `select = ["ALL"]` (see `.ruff.toml`) — expect strict enforcement (docstrings, type annotations, complexity limits). Test files get relaxed rules (see `[lint.per-file-ignores]`). Target is `py314`. Run `scripts/lint` before considering a change done; CI runs both lint and tests on every push/PR.
 
+## Release notes
+
+Write release notes as markdown format in simple, plain English and follow the established README style. Use clear sections such as **Behaviour changes — read before upgrading**, **Breaking changes**, **New**, **Fixes**, and **Housekeeping** when they apply. Keep bullets short, focus on what users will notice, and avoid unnecessary implementation detail or jargon.
+
 ## Architecture
 
 **Data flow:** `ArubaIAPClient` (aruba_client.py) logs into the IAP's REST API, session-authenticates, and runs `show clients` via the `show-cmd` endpoint, parsing the CLI table output with a regex (`_CLIENT_REGEX`) into a `dict[mac, ArubaClientData]` (a `TypedDict`). `ArubaIAPCoordinator` (`__init__.py`, a `DataUpdateCoordinator[dict[str, ArubaClientData]]` subclass) polls this on `scan_interval` and holds the latest snapshot as `coordinator.data`. Entries are typed as `ArubaConfigEntry = ConfigEntry[ArubaIAPCoordinator]`, and the coordinator is reached via `entry.runtime_data`.
