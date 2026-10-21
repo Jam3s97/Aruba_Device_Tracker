@@ -123,11 +123,6 @@ This integration is designed so that a device sitting still costs **nothing**:
 
 What remains — `access_point`, `essid`, `ip_address`, `os`, `channel` — only changes when something actually changes: the device roams to another AP, gets a new IP, or switches band. So a device that stays connected to the same AP writes one row when it arrives and one when it leaves.
 
-No `recorder:` configuration is needed. If you still want to trim history further, raising the poll interval reduces how quickly arrivals and departures are detected but does not otherwise affect row volume, since rows are now driven by real changes rather than by polling.
-
-> [!IMPORTANT]
-> **Breaking change in 2.0.0:** the `signal` and `speed` attributes were removed, and `last_seen` / `days_until_cleanup` are no longer present while a device is home. If you have automations or templates reading `state_attr('device_tracker.x', 'signal')` or reading `last_seen` on a home device, they will now return `None`. For "how long has this device been home", use the entity's built-in `last_changed` instead.
-
 ## Default Away Timer Behaviour
 
 The default Aruba IAP client inactivity timer is 1000 seconds (~16 minutes). When a client disconnects, its session remains in the client table until the timer expires.
