@@ -1,12 +1,8 @@
 {
   "domain": "aruba_device_tracker",
   "name": "Aruba Device Tracker",
-  "codeowners": [
-    "@Jam3s97"
-  ],
-  "categories": [
-    "presence_location.network_presence"
-  ],
+  "categories": ["presence_location.network_presence"],
+  "codeowners": ["@Jam3s97"],
   "config_flow": true,
   "documentation": "https://github.com/Jam3s97/Aruba_Device_Tracker",
   "integration_type": "hub",
