@@ -97,6 +97,22 @@ class TestTrackNewSwitchReEnable:
 
         assert registry.enabled == ["device_tracker.found_while_off"]
 
+    def test_configure_turning_track_new_on_enables_integration_disabled(
+        self, registry
+    ):
+        """Changing the option under Configure also restores tracked entities."""
+        entry = FakeEntry({"track_new_devices": False})
+        entity = ArubaTrackNewSwitch(entry)
+        entity.hass = SimpleNamespace()
+        entity.async_write_ha_state = lambda: None
+
+        asyncio.run(entity.async_added_to_hass())
+        entry.options = {"track_new_devices": True}
+
+        asyncio.run(entry.update_listeners[0](SimpleNamespace(), entry))
+
+        assert registry.enabled == ["device_tracker.found_while_off"]
+
 
 class TestOptionsEntitiesRedraw:
     @pytest.mark.parametrize(
@@ -104,7 +120,10 @@ class TestOptionsEntitiesRedraw:
     )
     def test_options_change_redraws_the_entity(self, entity_cls):
         """A change made under Configure must show without a state write."""
-        entry = FakeEntry()
+        initial_options = (
+            {"track_new_devices": True} if entity_cls is ArubaTrackNewSwitch else {}
+        )
+        entry = FakeEntry(initial_options)
         entity = entity_cls(entry)
         writes: list[None] = []
         entity.async_write_ha_state = lambda: writes.append(None)

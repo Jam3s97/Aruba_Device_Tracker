@@ -61,6 +61,7 @@ class ArubaTrackNewSwitch(ArubaOptionsEntity, SwitchEntity):
     def __init__(self, entry: ArubaConfigEntry) -> None:
         """Initialise the track-new-devices switch."""
         self._entry = entry
+        self._last_track_new = self.is_on
         self._attr_unique_id = f"{entry.entry_id}_track_new_devices"
         self._attr_device_info = get_device_info(entry)
 
@@ -73,9 +74,8 @@ class ArubaTrackNewSwitch(ArubaOptionsEntity, SwitchEntity):
         )
 
     async def async_turn_on(self, **kwargs: Any) -> None:  # noqa: ARG002
-        """Enable tracking and the trackers this integration disabled."""
+        """Enable tracking; the options listener restores disabled trackers."""
         await self._set(value=True)
-        await self._enable_all_tracker_entities()
 
     async def async_turn_off(self, **kwargs: Any) -> None:  # noqa: ARG002
         """Disable tracking for future new devices (does not disable existing ones)."""
@@ -87,6 +87,18 @@ class ArubaTrackNewSwitch(ArubaOptionsEntity, SwitchEntity):
         self.hass.config_entries.async_update_entry(self._entry, options=new_options)
         self.async_write_ha_state()
         LOGGER.debug("Aruba Device Tracker: track_new set to %s", value)
+
+    async def _async_entry_updated(
+        self,
+        hass: HomeAssistant,
+        entry: ArubaConfigEntry,
+    ) -> None:
+        """Apply track-new transitions and redraw after options changes."""
+        current_track_new = self.is_on
+        if current_track_new and not self._last_track_new:
+            await self._enable_all_tracker_entities()
+        self._last_track_new = current_track_new
+        await super()._async_entry_updated(hass, entry)
 
     async def _enable_all_tracker_entities(self) -> None:
         """

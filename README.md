@@ -82,7 +82,7 @@ Tracking and polling settings (track new devices, poll interval, stale device cl
 
 The poll interval, track new devices toggle, and stale device cleanup settings are also available as entities on the IAP device card for quick changes without opening **Configure**.
 
-Turning the **Track new devices** switch on also enables the trackers that were created disabled while it was off. Trackers you disabled yourself stay disabled.
+Turning **Track new devices** on from the switch or **Configure** also enables trackers that were created disabled while it was off. Trackers you disabled yourself stay disabled.
 
 ## Changing the IP Address or Credentials
 
