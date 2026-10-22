@@ -3,8 +3,9 @@
 [![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://hacs.xyz/)
 [![GitHub Release](https://img.shields.io/github/v/release/Jam3s97/Aruba_Device_Tracker)](https://github.com/Jam3s97/Aruba_Device_Tracker/releases)
 
-> [!TIP]
-> 🎉 **Now in the HACS default store!** No more adding a custom repository: just search for **Aruba Device Tracker** in HACS.
+### 🎉 Now in the HACS default store!
+
+No more adding a custom repository: just search for **Aruba Device Tracker** in HACS.
 
 A custom integration for Home Assistant that tracks devices connected to an Aruba Instant AP using the local REST API.
 
