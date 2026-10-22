@@ -76,7 +76,7 @@ Aruba Device Tracker is in the HACS default store, so there's no custom reposito
 1. Click the button above, or go to **Settings → Devices & Services → Add Integration**
 2. Search for **Aruba Device Tracker**
 3. **Step 1 - Connection:**
-   - **IP Address** — your IAP or Virtual Controller IP (e.g. `192.168.1.10`)
+   - **IP Address** - your IAP or Virtual Controller IP (e.g. `192.168.1.10`)
    - **Username** - IAP admin username
    - **Password** - IAP admin password
    - **Verify SSL certificate** - leave **off** (the default) unless you have installed a trusted certificate on the IAP; Instant APs ship with a self-signed certificate that cannot be verified
@@ -124,14 +124,14 @@ Both are configurable during setup, via **Configure**, or directly on the IAP de
 
 ## Recorder Database Size
 
-Home Assistant writes a row to the recorder database whenever an entity's state **or any of its attributes** changes. A device tracker's state (`home`/`not_home`) changes rarely, so attributes are what drive database growth — and an attribute that ticks on every poll costs one row per device per poll. At the default 30-second interval that is ~2,880 rows per day per device.
+Home Assistant writes a row to the recorder database whenever an entity's state **or any of its attributes** changes. A device tracker's state (`home`/`not_home`) changes rarely, so attributes are what drive database growth - and an attribute that ticks on every poll costs one row per device per poll. At the default 30-second interval that is ~2,880 rows per day per device.
 
 This integration is designed so that a device sitting still costs **nothing**:
 
 - **`signal` and `speed` are not exposed.** The IAP reports both and they are still parsed (they show up in debug logs), but their values change almost continuously, making them pure database churn. See the note below if you were using them.
 - **`last_seen` and `days_until_cleanup` are only published while a device is away.** For a connected device "last seen" is always ~now, so it changed every poll while telling you nothing the `home` state didn't already.
 
-What remains — `access_point`, `essid`, `ip_address`, `os`, `channel` — only changes when something actually changes: the device roams to another AP, gets a new IP, or switches band. So a device that stays connected to the same AP writes one row when it arrives and one when it leaves.
+What remains - `access_point`, `essid`, `ip_address`, `os`, `channel` - only changes when something actually changes: the device roams to another AP, gets a new IP, or switches band. So a device that stays connected to the same AP writes one row when it arrives and one when it leaves.
 
 ## Default Away Timer Behaviour
 
