@@ -1,6 +1,14 @@
-# Aruba Instant AP — Home Assistant Integration
+# Aruba Instant AP - Home Assistant Integration
 
-A custom integration for Home Assistant that tracks devices connected to an Aruba Instant AP using the local REST API.
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://hacs.xyz/)
+[![GitHub Release](https://img.shields.io/github/v/release/Jam3s97/Aruba_Device_Tracker)](https://github.com/Jam3s97/Aruba_Device_Tracker/releases)
+
+
+A custom integration for Home Assistant that tracks devices connected to Aruba Instant APs using the local REST API.
+
+### 🎉 Now in the HACS default store!
+
+No more adding a custom repository: just search for **Aruba Device Tracker** in HACS.
 
 > **Disclaimer:** This is an unofficial integration and is not affiliated with or endorsed by Aruba Networks. Use at your own risk.
 
@@ -9,28 +17,28 @@ A custom integration for Home Assistant that tracks devices connected to an Arub
 
 ## Features
 
-- **Device Tracker** — marks devices home/away based on Wi-Fi association
-- **Extra attributes per device** — while the device is **home**:
-  - `MAC` — Client MAC address
-  - `Host name` — Client hostname
-  - `ip` — current IP address (standard Home Assistant tracker attribute)
-  - `access_point` — which AP the device is connected to
-  - `essid` — the SSID/network name
-  - `ip_address` — current IP address
-  - `os` — operating system detected by the IAP
-  - `channel` — Wi-Fi channel
+- **Device Tracker** - marks devices home/away based on Wi-Fi association
+- **Extra attributes per device** - while the device is **home**:
+  - `MAC` - Client MAC address
+  - `Host name` - Client hostname
+  - `ip` - current IP address (standard Home Assistant tracker attribute)
+  - `access_point` - which AP the device is connected to
+  - `essid` - the SSID/network name
+  - `ip_address` - current IP address
+  - `os` - operating system detected by the IAP
+  - `channel` - Wi-Fi channel
 
   ...and while the device is **away**:
-  - `last_seen` — when the IAP last saw it (survives restarts)
-  - `days_until_cleanup` — days left before auto-removal, if enabled
-- **Config Flow** — set up entirely from the HA UI, no YAML required
-- **Re-authentication** — if the IAP rejects the stored credentials (e.g. the password was rotated), Home Assistant prompts you to re-enter them instead of failing silently
-- **Track new devices toggle** — choose whether newly discovered devices are tracked by default (off by default)
-- **Configurable poll interval** — how often the IAP is queried (default 30s, range 10–300s)
-- **Auto-remove stale devices** — automatically remove entities for devices not seen for a configurable number of days
-- **Friendly name renaming** — rename any device via the HA entity registry
-- **Offline devices stay away** — devices that are away when HA restarts correctly restore their away state; no unavailable flash or "entity no longer provided" warnings
-- **AP outages show as unavailable** — a single failed poll is ignored and the last known state is kept. If the IAP fails to answer 3 polls in a row, trackers become `unavailable` (rather than showing stale home/away) until it responds again. The outage and the recovery are each logged once. A device that has simply left is always `not_home`, never `unavailable`
+  - `last_seen` - when the IAP last saw it (survives restarts)
+  - `days_until_cleanup` - days left before auto-removal, if enabled
+- **Config Flow** - set up entirely from the HA UI, no YAML required
+- **Re-authentication** - if the IAP rejects the stored credentials (e.g. the password was rotated), Home Assistant prompts you to re-enter them instead of failing silently
+- **Track new devices toggle** - choose whether newly discovered devices are tracked by default (off by default)
+- **Configurable poll interval** - how often the IAP is queried (default 30s, range 10–300s)
+- **Auto-remove stale devices** - automatically remove entities for devices not seen for a configurable number of days
+- **Friendly name renaming** - rename any device via the HA entity registry
+- **Offline devices stay away** - devices that are away when HA restarts correctly restore their away state; no unavailable flash or "entity no longer provided" warnings
+- **AP outages show as unavailable** - a single failed poll is ignored and the last known state is kept. If the IAP fails to answer 3 polls in a row, trackers become `unavailable` (rather than showing stale home/away) until it responds again. The outage and the recovery are each logged once. A device that has simply left is always `not_home`, never `unavailable`
 
 ## Requirements
 
@@ -51,8 +59,10 @@ Instant AP# commit apply
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Jam3s97&repository=Aruba_Device_Tracker&category=integration)
 
-1. Click the button above, or add this repository as a custom repository in HACS manually (category: **Integration**)
-2. Search for **Aruba Device Tracker** and install
+Aruba Device Tracker is in the HACS default store, so there's no custom repository to add.
+
+1. Click the button above, or open **HACS** in Home Assistant and search for **Aruba Device Tracker**
+2. Click **Download**
 3. Restart Home Assistant
 
 ### Manual
@@ -65,16 +75,16 @@ Instant AP# commit apply
 
 1. Click the button above, or go to **Settings → Devices & Services → Add Integration**
 2. Search for **Aruba Device Tracker**
-3. **Step 1 — Connection:**
-   - **IP Address** — your IAP or Virtual Controller IP (e.g. `192.168.1.10`)
-   - **Username** — IAP admin username
-   - **Password** — IAP admin password
-   - **Verify SSL certificate** — leave **off** (the default) unless you have installed a trusted certificate on the IAP; Instant APs ship with a self-signed certificate that cannot be verified
-4. **Step 2 — Tracking & Polling:**
-   - **Track new devices by default** — when on, newly discovered devices are immediately tracked; when off, their entities are created but disabled until you enable them manually
-   - **Poll interval** — how often the IAP is queried in seconds (default 30s)
-   - **Auto-Remove Stale Devices** — automatically remove entities for devices not seen for a set number of days (default: on)
-   - **Auto-Remove Stale Devices After** — number of days of inactivity before an entity is removed (default: 30 days)
+3. **Step 1 - Connection:**
+   - **IP Address** - your IAP or Virtual Controller IP (e.g. `192.168.1.10`)
+   - **Username** - IAP admin username
+   - **Password** - IAP admin password
+   - **Verify SSL certificate** - leave **off** (the default) unless you have installed a trusted certificate on the IAP; Instant APs ship with a self-signed certificate that cannot be verified
+4. **Step 2 - Tracking & Polling:**
+   - **Track new devices by default** - when on, newly discovered devices are immediately tracked; when off, their entities are created but disabled until you enable them manually
+   - **Poll interval** - how often the IAP is queried in seconds (default 30s)
+   - **Auto-Remove Stale Devices** - automatically remove entities for devices not seen for a set number of days (default: on)
+   - **Auto-Remove Stale Devices After** - number of days of inactivity before an entity is removed (default: 30 days)
 
 ## Options
 
@@ -88,7 +98,7 @@ Turning **Track new devices** on from the switch or **Configure** also enables t
 
 To change the IP address, username, password, or certificate verification, open the integration card's **⋮** menu and choose **Reconfigure**. The connection is tested before anything is saved, then the integration reloads.
 
-The password field is not pre-filled — leave it blank to keep the stored password.
+The password field is not pre-filled - leave it blank to keep the stored password.
 
 ## Multiple Clusters or Standalone APs
 
@@ -104,8 +114,8 @@ Go to **Settings → Devices & Services → Entities**, find the device tracker 
 
 When enabled, device tracker entities that have not been seen for the configured number of days are automatically removed. The check runs at startup and roughly hourly thereafter. The last-seen timestamp for each device is stored persistently and survives HA restarts.
 
-- **Auto-Remove Stale Devices** switch — enable or disable the feature
-- **Auto-Remove Stale Devices After** number — days threshold (1–365, default 30)
+- **Auto-Remove Stale Devices** switch - enable or disable the feature
+- **Auto-Remove Stale Devices After** number - days threshold (1–365, default 30)
 
 Both are configurable during setup, via **Configure**, or directly on the IAP device card.
 
@@ -114,14 +124,14 @@ Both are configurable during setup, via **Configure**, or directly on the IAP de
 
 ## Recorder Database Size
 
-Home Assistant writes a row to the recorder database whenever an entity's state **or any of its attributes** changes. A device tracker's state (`home`/`not_home`) changes rarely, so attributes are what drive database growth — and an attribute that ticks on every poll costs one row per device per poll. At the default 30-second interval that is ~2,880 rows per day per device.
+Home Assistant writes a row to the recorder database whenever an entity's state **or any of its attributes** changes. A device tracker's state (`home`/`not_home`) changes rarely, so attributes are what drive database growth - and an attribute that ticks on every poll costs one row per device per poll. At the default 30-second interval that is ~2,880 rows per day per device.
 
 This integration is designed so that a device sitting still costs **nothing**:
 
 - **`signal` and `speed` are not exposed.** The IAP reports both and they are still parsed (they show up in debug logs), but their values change almost continuously, making them pure database churn. See the note below if you were using them.
 - **`last_seen` and `days_until_cleanup` are only published while a device is away.** For a connected device "last seen" is always ~now, so it changed every poll while telling you nothing the `home` state didn't already.
 
-What remains — `access_point`, `essid`, `ip_address`, `os`, `channel` — only changes when something actually changes: the device roams to another AP, gets a new IP, or switches band. So a device that stays connected to the same AP writes one row when it arrives and one when it leaves.
+What remains - `access_point`, `essid`, `ip_address`, `os`, `channel` - only changes when something actually changes: the device roams to another AP, gets a new IP, or switches band. So a device that stays connected to the same AP writes one row when it arrives and one when it leaves.
 
 ## Default Away Timer Behaviour
 
