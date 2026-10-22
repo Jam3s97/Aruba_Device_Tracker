@@ -3,13 +3,14 @@
 [![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://hacs.xyz/)
 [![GitHub Release](https://img.shields.io/github/v/release/Jam3s97/Aruba_Device_Tracker)](https://github.com/Jam3s97/Aruba_Device_Tracker/releases)
 
-### 🎉 Now in the HACS default store!
-
-No more adding a custom repository: just search for **Aruba Device Tracker** in HACS.
 
 A custom integration for Home Assistant that tracks devices connected to an Aruba Instant AP using the local REST API.
 
 > **Disclaimer:** This is an unofficial integration and is not affiliated with or endorsed by Aruba Networks. Use at your own risk.
+
+### 🎉 Now in the HACS default store!
+
+No more adding a custom repository: just search for **Aruba Device Tracker** in HACS.
 
 > [!NOTE]
 > This is a modern replacement for Home Assistant's built-in `aruba` integration, which is deprecated and polls Instant APs over SSH. This integration instead uses the IAP's local REST API (config flow, no YAML, no SSH).
