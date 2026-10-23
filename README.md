@@ -1,7 +1,17 @@
 # Aruba Instant AP - Home Assistant Integration
 
-[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://hacs.xyz/)
-[![GitHub Release](https://img.shields.io/github/v/release/Jam3s97/Aruba_Device_Tracker)](https://github.com/Jam3s97/Aruba_Device_Tracker/releases)
+[![HACS Default][hacs-shield]][hacs-url]
+[![GitHub Release][release-shield]][release-url]
+[![Installs][installs-shield]][installs-url]
+
+<sub>The installs count only includes people who have opted in to Home Assistant analytics. Plenty of us keep that switched off (keeping our data at home is half the point of running things locally), so the real number is higher.</sub>
+
+[hacs-shield]: https://img.shields.io/badge/HACS-Default-41BDF5.svg
+[hacs-url]: https://hacs.xyz/
+[release-shield]: https://img.shields.io/github/v/release/Jam3s97/Aruba_Device_Tracker
+[release-url]: https://github.com/Jam3s97/Aruba_Device_Tracker/releases
+[installs-shield]: https://img.shields.io/badge/dynamic/json?logo=home-assistant&label=installs&cacheSeconds=15600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.aruba_device_tracker.total
+[installs-url]: https://my.home-assistant.io/redirect/hacs_repository/?owner=Jam3s97&repository=Aruba_Device_Tracker&category=integration
 
 
 A custom integration for Home Assistant that tracks devices connected to Aruba Instant APs using the local REST API.
