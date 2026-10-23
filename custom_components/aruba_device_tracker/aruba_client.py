@@ -7,13 +7,16 @@ import json
 import logging
 import re
 import ssl
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 from urllib.parse import quote, urlencode
 
 import requests
 import urllib3
 from homeassistant.helpers.device_registry import format_mac
 from requests.adapters import HTTPAdapter
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -87,6 +90,23 @@ class ArubaClientData(TypedDict):
     speed: str | None
 
 
+class ArubaAP(TypedDict):
+    """
+    An access point as parsed from 'show aps' output on the conductor.
+
+    Keyed by serial number. Volatile columns (uptime, radio utilisation,
+    noise) are deliberately not carried, so nothing built on this can turn
+    them into per-poll recorder writes.
+    """
+
+    serial: str
+    name: str
+    ip: str | None
+    is_conductor: bool
+    model: str | None
+    clients: int | None
+
+
 _IPV4_PATTERN = r"(?:\d{1,3}\.){3}\d{1,3}"
 # MAC separators may be ":" or "-".
 _MAC_PATTERN = r"(?:[0-9a-f]{2}[:\-]){5}[0-9a-f]{2}"
@@ -151,6 +171,16 @@ _FOOTER_PREFIXES = (
 
 # The regex fallback cannot tell a header from data, so it skips these too.
 _SKIP_PREFIXES = ("name", "----", *_FOOTER_PREFIXES)
+
+# 'show aps' columns. The serial number is the key: there is no MAC column,
+# and unlike the name or IP it never changes.
+_AP_COLUMN_ALIASES = {"ipaddress": "ip"}
+_AP_REQUIRED_COLUMNS = frozenset({"name", "ip", "serial"})
+_SERIAL_REGEX = re.compile(r"[A-Za-z0-9]+")
+# Type reads e.g. "505(indoor)" or "365(outdoor)".
+_AP_TYPE_REGEX = re.compile(r"(?P<model>\d+[A-Za-z]*)(?:\(.*\))?")
+# Aruba fills an empty table cell with "-" or "--".
+_EMPTY_CELLS = frozenset({"", "-", "--"})
 
 
 def _column_key(heading: str, aliases: dict[str, str]) -> str:
@@ -240,6 +270,19 @@ def _is_rule(stripped: str) -> bool:
     return set(stripped) <= {"-", " "}
 
 
+def _table_rows(lines: list[str], header_index: int) -> Iterator[tuple[str, str]]:
+    """Yield (raw, stripped) for each candidate data row after a header."""
+    for line in lines[header_index + 1 :]:
+        stripped = line.strip()
+        if (
+            not stripped
+            or _is_rule(stripped)
+            or stripped.lower().startswith(_FOOTER_PREFIXES)
+        ):
+            continue
+        yield line, stripped
+
+
 def _parse_clients(output: str) -> tuple[dict[str, ArubaClientData], list[str]]:
     """
     Parse 'show clients' output into clients keyed by MAC.
@@ -264,14 +307,7 @@ def _parse_clients(output: str) -> tuple[dict[str, ArubaClientData], list[str]]:
         return clients, skipped
 
     header_index, columns = located
-    for line in lines[header_index + 1 :]:
-        stripped = line.strip()
-        if (
-            not stripped
-            or _is_rule(stripped)
-            or stripped.lower().startswith(_FOOTER_PREFIXES)
-        ):
-            continue
+    for line, stripped in _table_rows(lines, header_index):
         # A row that doesn't line up with the header (unexpected firmware
         # formatting) falls back to the regex rather than dropping the
         # client, which would mark a present device as away.
@@ -281,6 +317,68 @@ def _parse_clients(output: str) -> tuple[dict[str, ArubaClientData], list[str]]:
         else:
             clients[client["mac"]] = client
     return clients, skipped
+
+
+def _cell(row: dict[str, str], key: str) -> str | None:
+    """Return a cell's value, or None if it is missing or a '-'/'--' blank."""
+    value = row.get(key, "")
+    return None if value in _EMPTY_CELLS else value
+
+
+def _ap_model(ap_type: str | None) -> str | None:
+    """Turn a 'show aps' Type cell into a model name: '505(indoor)' -> 'AP-505'."""
+    if ap_type is None:
+        return None
+    match = _AP_TYPE_REGEX.fullmatch(ap_type)
+    if match is None:
+        return ap_type
+    return f"AP-{match.group('model')}"
+
+
+def _ap_from_row(row: dict[str, str]) -> ArubaAP | None:
+    """Build an AP from a sliced 'show aps' row, or None if it has no serial."""
+    serial = _cell(row, "serial")
+    if serial is None or not _SERIAL_REGEX.fullmatch(serial):
+        return None
+    ip = _cell(row, "ip")
+    # The conductor's IP carries a trailing '*'.
+    is_conductor = ip is not None and ip.endswith("*")
+    if ip is not None:
+        ip = ip.rstrip("*") or None
+    clients = _cell(row, "clients")
+    return ArubaAP(
+        serial=serial,
+        name=_cell(row, "name") or serial,
+        ip=ip,
+        is_conductor=is_conductor,
+        model=_ap_model(_cell(row, "type")),
+        clients=int(clients) if clients is not None and clients.isdigit() else None,
+    )
+
+
+def _parse_aps(output: str) -> tuple[dict[str, ArubaAP], list[str]] | None:
+    """
+    Parse 'show aps' output into APs keyed by serial number.
+
+    Returns the APs and the stripped lines that could not be parsed, or None
+    if the output has no recognisable header. Unlike 'show clients' there is
+    no fallback: an AP table is only ever read by column name.
+    """
+    lines = output.splitlines()
+    located = _find_columns(lines, _AP_REQUIRED_COLUMNS, _AP_COLUMN_ALIASES)
+    if located is None:
+        return None
+
+    header_index, columns = located
+    aps: dict[str, ArubaAP] = {}
+    skipped: list[str] = []
+    for line, stripped in _table_rows(lines, header_index):
+        ap = _ap_from_row(_slice_row(line, columns))
+        if ap is None:
+            skipped.append(stripped)
+        else:
+            aps[ap["serial"]] = ap
+    return aps, skipped
 
 
 class _LegacyTLSAdapter(HTTPAdapter):
@@ -344,6 +442,9 @@ class ArubaIAPClient:
         self._sid: str | None = None
         self._session = requests.Session()
         self._legacy_ssl = False
+        # Commands whose last non-Success status has already been warned
+        # about. See _show_cmd.
+        self._refused_cmds: set[str] = set()
 
     # ------------------------------------------------------------------
     # Redaction
@@ -593,7 +694,12 @@ class ArubaIAPClient:
             return None
 
         if data.get("Status") != "Success":
-            _LOGGER.warning(
+            # Warn on the first refusal only. A refusal is usually permanent
+            # (e.g. an API account without the privilege for 'show aps'), and
+            # this runs every poll, so repeating it would flood the log.
+            log = _LOGGER.debug if cmd in self._refused_cmds else _LOGGER.warning
+            self._refused_cmds.add(cmd)
+            log(
                 "show-cmd '%s' failed (status-code %s): %s",
                 cmd,
                 data.get("Status-code"),
@@ -601,6 +707,7 @@ class ArubaIAPClient:
             )
             return None
 
+        self._refused_cmds.discard(cmd)
         raw: str = data.get("Command output", "")
         return raw.replace("\\n", "\n").replace("\\r", "\r")
 
@@ -651,3 +758,37 @@ class ArubaIAPClient:
 
         _LOGGER.debug("Aruba IAP found %d clients", len(clients))
         return clients
+
+    def get_aps(self) -> dict[str, ArubaAP] | None:
+        """
+        Return the cluster's access points keyed by serial number.
+
+        Run against the conductor, which reports every AP in the cluster.
+        Returns None if the API call failed or the output has no AP table.
+
+        Raises:
+            ArubaAuthError: The AP rejected the credentials.
+
+        """
+        output = self._show_cmd("show aps")
+        if output is None:
+            return None
+
+        parsed = _parse_aps(output)
+        if parsed is None:
+            _LOGGER.debug(
+                "Aruba IAP: 'show aps' output has no AP table header: %r",
+                self._redact(output[:_DEBUG_BODY_SNIPPET_LEN]),
+            )
+            return None
+
+        aps, skipped = parsed
+        if skipped:
+            _LOGGER.debug(
+                "Aruba IAP: %d line(s) did not match the AP table:\n%s",
+                len(skipped),
+                "\n".join(f"  > {s}" for s in skipped),
+            )
+
+        _LOGGER.debug("Aruba IAP found %d access points", len(aps))
+        return aps
