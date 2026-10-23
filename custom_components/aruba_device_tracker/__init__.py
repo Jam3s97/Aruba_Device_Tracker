@@ -17,25 +17,30 @@ from homeassistant.exceptions import (
     ConfigEntryError,
     ConfigEntryNotReady,
 )
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .aruba_client import (
+    ArubaAP,
     ArubaAuthError,
     ArubaCertificateError,
     ArubaClientData,
     ArubaConnectionError,
+    ArubaError,
     ArubaIAPClient,
 )
 from .const import (
     CLEANUP_INTERVAL_HOURS,
     CONF_CLEANUP_DAYS,
     CONF_CLEANUP_ENABLED,
+    CONF_ENABLE_AP_DEVICES,
     CONF_SCAN_INTERVAL,
     CONF_VERIFY_SSL,
     DEFAULT_CLEANUP_DAYS,
     DEFAULT_CLEANUP_ENABLED,
+    DEFAULT_ENABLE_AP_DEVICES,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
@@ -44,7 +49,7 @@ from .const import (
     STORAGE_VERSION,
     UNAVAILABLE_AFTER_FAILED_POLLS,
 )
-from .utils import tracker_unique_id
+from .utils import is_ap_device, tracker_unique_id
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -54,11 +59,16 @@ if TYPE_CHECKING:
 
 LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [
+BASE_PLATFORMS: list[Platform] = [
     Platform.DEVICE_TRACKER,
     Platform.SWITCH,
     Platform.NUMBER,
 ]
+
+# Forwarded only while the AP-devices option is on. Every entity on these
+# platforms belongs to that feature, which is what lets turning it off remove
+# them by domain.
+AP_PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.SENSOR]
 
 type ArubaConfigEntry = ConfigEntry[ArubaIAPCoordinator]
 
@@ -106,12 +116,14 @@ async def async_setup_entry(
         raise ConfigEntryNotReady(str(err)) from err
 
     scan_interval = int(_option(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
+    ap_devices = bool(_option(entry, CONF_ENABLE_AP_DEVICES, DEFAULT_ENABLE_AP_DEVICES))
 
     coordinator = ArubaIAPCoordinator(
         hass=hass,
         client=client,
         entry=entry,
         scan_interval=scan_interval,
+        ap_devices=ap_devices,
     )
 
     # Load persisted last-seen data before the first refresh so cleanup
@@ -129,7 +141,13 @@ async def async_setup_entry(
 
     entry.runtime_data = coordinator
 
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    if not ap_devices:
+        # Run on every setup with the option off, not only when it is turned
+        # off: that keeps it idempotent and also tidies up after a downgrade
+        # or a reload that failed halfway.
+        _async_remove_ap_devices(hass, entry)
+
+    await hass.config_entries.async_forward_entry_setups(entry, coordinator.platforms)
 
     # NOTE: No reloading update_listener / async_reload_entry registered here.
     #
@@ -150,8 +168,65 @@ async def async_setup_entry(
     # causes the banner "entity no longer provided" because the switch and
     # number entities write to options on state changes, which fires the
     # listener and tears down the platform while tracker entities are live.
+    #
+    # The one option that does need a reload, enable_ap_devices (it decides
+    # which platforms are forwarded), is reloaded explicitly by the options
+    # flow, and only when its value actually changes.
 
     return True
+
+
+@callback
+def _async_remove_ap_devices(hass: HomeAssistant, entry: ArubaConfigEntry) -> None:
+    """
+    Remove this entry's AP entities and AP devices.
+
+    Tracker entities and the IAP control device are never touched.
+    """
+    ap_domains = {str(platform) for platform in AP_PLATFORMS}
+    ent_reg = er.async_get(hass)
+    for reg_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+        if reg_entry.domain in ap_domains:
+            ent_reg.async_remove(reg_entry.entity_id)
+
+    dev_reg = dr.async_get(hass)
+    for device in dr.async_entries_for_config_entry(dev_reg, entry.entry_id):
+        if not is_ap_device(device, entry.entry_id):
+            continue
+        if device.config_entries == {entry.entry_id}:
+            dev_reg.async_remove_device(device.id)
+        else:
+            # Before HA 2026.9 a device could belong to several config
+            # entries, so two entries for the same cluster shared AP devices:
+            # detach this one only. HA 2026.9+ gives each entry its own
+            # device (and deprecates remove_config_entry_id), so this branch
+            # never runs there.
+            dev_reg.async_update_device(
+                device.id, remove_config_entry_id=entry.entry_id
+            )
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,  # noqa: ARG001
+    entry: ArubaConfigEntry,
+    device_entry: dr.DeviceEntry,
+) -> bool:
+    """
+    Allow deleting an AP device from the UI once the AP has gone.
+
+    AP devices are kept when an AP drops out of 'show aps' (a rebooting AP
+    shouldn't lose its name or area), so this is how a retired AP is removed.
+    An AP that is still reporting would come straight back, so it is refused,
+    as are the IAP control device and tracker devices.
+    """
+    if not is_ap_device(device_entry, entry.entry_id):
+        return False
+    coordinator = getattr(entry, "runtime_data", None)
+    if coordinator is None:
+        return True
+    return not any(
+        (DOMAIN, serial) in device_entry.identifiers for serial in coordinator.aps
+    )
 
 
 async def async_migrate_entry(
@@ -190,9 +265,13 @@ async def async_unload_entry(
     """Handle removal of an entry."""
     # Unload platforms first: if that fails the entry stays loaded, and it
     # must not be left holding a logged-out session.
-    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    # Unload exactly what setup forwarded. Reading the option here instead
+    # would break the reload that follows toggling it.
+    coordinator = entry.runtime_data
+    unloaded = await hass.config_entries.async_unload_platforms(
+        entry, coordinator.platforms
+    )
     if unloaded:
-        coordinator = entry.runtime_data
         await coordinator.async_flush_last_seen()
         await hass.async_add_executor_job(coordinator.client.logout)
         await hass.async_add_executor_job(coordinator.client.close)
@@ -208,6 +287,8 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
         client: ArubaIAPClient,
         entry: ArubaConfigEntry,
         scan_interval: int = DEFAULT_SCAN_INTERVAL,
+        *,
+        ap_devices: bool = False,
     ) -> None:
         """Initialise the coordinator with a client and polling interval."""
         super().__init__(
@@ -228,6 +309,18 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
         self._last_cleanup: datetime | None = None
         self._failed_polls = 0
         self._removal_listeners: list[Callable[[set[str]], None]] = []
+        # AP devices: fixed for the life of this setup, because it decides
+        # which platforms were forwarded. Toggling it reloads the entry.
+        self.ap_devices = ap_devices
+        self.platforms = BASE_PLATFORMS + (AP_PLATFORMS if ap_devices else [])
+        # serial -> AP, last known. Kept on a failed 'show aps' so device
+        # names survive; aps_ok says whether it is current.
+        self.aps: dict[str, ArubaAP] = {}
+        self.aps_ok = False
+        # serial -> connected clients, counted from the client list so the
+        # sensors always agree with the trackers.
+        self.ap_client_counts: dict[str, int] = {}
+        self._duplicate_ap_names: set[str] = set()
 
     # ------------------------------------------------------------------
     # Persistent last-seen storage
@@ -367,10 +460,102 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
                 self.last_seen[mac] = now_iso
             self._async_schedule_save()
 
+        if self.ap_devices:
+            await self._async_update_aps(result)
+
         # Run stale-device cleanup if enabled and due.
         await self._async_cleanup_stale_devices()
 
         return result
+
+    # ------------------------------------------------------------------
+    # Access points
+    # ------------------------------------------------------------------
+
+    async def _async_update_aps(self, clients: dict[str, ArubaClientData]) -> None:
+        """
+        Refresh the AP list, isolated from client tracking.
+
+        Runs after 'show clients' in the same poll, never in parallel: the two
+        share one HTTP session and login, and load on the AP's management
+        plane is the usual cause of failed polls. A failure here only marks
+        the AP entities unavailable. The one exception is a rejected login,
+        which would fail the next 'show clients' too, so it starts reauth.
+        """
+        try:
+            aps = await self.hass.async_add_executor_job(self.client.get_aps)
+        except ArubaAuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
+        except ArubaError as err:
+            # str(err) is built by the client and carries no session token.
+            LOGGER.debug("Aruba IAP access point list unavailable: %s", err)
+            aps = None
+        except Exception:
+            LOGGER.exception("Unexpected error reading the Aruba IAP access points")
+            aps = None
+
+        self.aps_ok = aps is not None
+        if aps is not None:
+            self._async_rename_ap_devices(aps)
+            self.aps = aps
+        self.ap_client_counts = self._count_clients_per_ap(clients)
+
+    @callback
+    def _async_rename_ap_devices(self, aps: dict[str, ArubaAP]) -> None:
+        """
+        Follow an AP rename on the controller.
+
+        DeviceInfo is only applied when an entity is added, so a rename while
+        running needs an explicit update. A name the user set in HA is stored
+        separately (name_by_user) and still wins.
+        """
+        dev_reg = dr.async_get(self.hass)
+        for serial, ap in aps.items():
+            previous = self.aps.get(serial)
+            if previous is None or previous["name"] == ap["name"]:
+                continue
+            device = dev_reg.async_get_device(identifiers={(DOMAIN, serial)})
+            if device is not None:
+                dev_reg.async_update_device(device.id, name=ap["name"])
+
+    def _count_clients_per_ap(
+        self, clients: dict[str, ArubaClientData]
+    ) -> dict[str, int]:
+        """
+        Count connected clients per AP serial.
+
+        'show clients' names a client's AP but has no AP serial, so clients
+        are matched to APs by name.
+        """
+        serial_by_name: dict[str, str] = {}
+        for serial, ap in self.aps.items():
+            name = ap["name"]
+            if name in serial_by_name and name not in self._duplicate_ap_names:
+                self._duplicate_ap_names.add(name)
+                LOGGER.warning(
+                    "Two Aruba access points are both named '%s', so their "
+                    "client counts can't be told apart. Give each AP a "
+                    "unique name on the controller",
+                    name,
+                )
+            serial_by_name[name] = serial
+
+        counts = dict.fromkeys(self.aps, 0)
+        for client in clients.values():
+            serial = serial_by_name.get(client["access_point"] or "")
+            if serial is not None:
+                counts[serial] += 1
+
+        for serial, ap in self.aps.items():
+            if ap["clients"] is not None and ap["clients"] != counts[serial]:
+                # Expected now and then: the two commands are moments apart.
+                LOGGER.debug(
+                    "Aruba IAP %s reports %d client(s); the client list has %d",
+                    ap["name"],
+                    ap["clients"],
+                    counts[serial],
+                )
+        return counts
 
     # ------------------------------------------------------------------
     # Stale device cleanup

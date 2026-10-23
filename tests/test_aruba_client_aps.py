@@ -113,6 +113,28 @@ class TestLayout:
         assert ap["clients"] is None
         assert ap["model"] is None
 
+    def test_booting_ap_row_is_parsed(self, get_aps):
+        """
+        Captured live: an AP rejoining after power-on is listed as 'monitor'.
+
+        For about 15 seconds its Clients cell is blank and its radio channels
+        are '-', before it settles as 'access'.
+        """
+        text = (
+            "Name      IP Address    Mode     Clients  Type         Serial #"
+            "    radio0 Channel\n"
+            "----      ----------    ----     -------  ----         --------"
+            "    --------------\n"
+            "OfficeAP  203.0.113.31  monitor           505(indoor)  TESTSN0006"
+            "  -\n"
+        )
+
+        ap = get_aps(text=text)["TESTSN0006"]
+
+        assert ap["name"] == "OfficeAP"
+        assert ap["clients"] is None
+        assert ap["model"] == "AP-505"
+
     def test_unrecognised_type_is_kept_as_is(self, get_aps):
         text = (
             HEADER

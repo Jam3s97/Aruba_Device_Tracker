@@ -25,11 +25,13 @@ from .aruba_client import (
 from .const import (
     CONF_CLEANUP_DAYS,
     CONF_CLEANUP_ENABLED,
+    CONF_ENABLE_AP_DEVICES,
     CONF_SCAN_INTERVAL,
     CONF_TRACK_NEW,
     CONF_VERIFY_SSL,
     DEFAULT_CLEANUP_DAYS,
     DEFAULT_CLEANUP_ENABLED,
+    DEFAULT_ENABLE_AP_DEVICES,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_TRACK_NEW,
     DEFAULT_VERIFY_SSL,
@@ -361,7 +363,19 @@ class ArubaIAPOptionsFlow(config_entries.OptionsFlow):
                 )
             # Merge rather than replace: options can hold keys this form does
             # not show, such as a verify_ssl written by older versions.
-            return self.async_create_entry(data={**entry.options, **user_input})
+            options = {**entry.options, **user_input}
+            ap_devices_changed = user_input[CONF_ENABLE_AP_DEVICES] != _current(
+                CONF_ENABLE_AP_DEVICES, DEFAULT_ENABLE_AP_DEVICES
+            )
+            if ap_devices_changed:
+                # The only option that needs a reload: it decides which
+                # platforms are forwarded. Saved here, before scheduling,
+                # because HA starts the reload task eagerly and it would
+                # otherwise set up again with the old value. Not an
+                # update_listener: see the note in async_setup_entry.
+                self.hass.config_entries.async_update_entry(entry, options=options)
+                self.hass.config_entries.async_schedule_reload(entry.entry_id)
+            return self.async_create_entry(data=options)
 
         return self.async_show_form(
             step_id="init",
@@ -387,6 +401,12 @@ class ArubaIAPOptionsFlow(config_entries.OptionsFlow):
                     ): vol.All(
                         int, vol.Range(min=MIN_CLEANUP_DAYS, max=MAX_CLEANUP_DAYS)
                     ),
+                    vol.Optional(
+                        CONF_ENABLE_AP_DEVICES,
+                        default=_current(
+                            CONF_ENABLE_AP_DEVICES, DEFAULT_ENABLE_AP_DEVICES
+                        ),
+                    ): bool,
                 }
             ),
         )

@@ -2,11 +2,15 @@
 
 DOMAIN = "aruba_device_tracker"
 
+# Shared by the IAP control device and the AP devices.
+MANUFACTURER = "Aruba Networks (HPE)"
+
 CONF_TRACK_NEW = "track_new_devices"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_CLEANUP_ENABLED = "cleanup_enabled"
 CONF_CLEANUP_DAYS = "cleanup_days"
 CONF_VERIFY_SSL = "verify_ssl"
+CONF_ENABLE_AP_DEVICES = "enable_ap_devices"
 
 DEFAULT_TRACK_NEW = False
 DEFAULT_SCAN_INTERVAL = 30  # seconds
@@ -21,6 +25,11 @@ MAX_CLEANUP_DAYS = 365
 # Instant APs ship with a self-signed certificate, so verification is off by
 # default. Users who have provisioned a trusted certificate can opt in.
 DEFAULT_VERIFY_SSL = False
+
+# Each access point in the cluster becomes a device with a client-count sensor.
+# Costs one extra 'show aps' request per poll. On by default for the 2.2 beta;
+# revisit before the stable release.
+DEFAULT_ENABLE_AP_DEVICES = True
 
 # Client data attribute keys.
 #
