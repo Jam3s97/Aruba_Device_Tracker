@@ -38,6 +38,8 @@ No more adding a custom repository: just search for **Aruba Device Tracker** in 
 - **Auto-remove stale devices** - automatically remove entities for devices not seen for a configurable number of days
 - **Friendly name renaming** - rename any device via the HA entity registry
 - **Offline devices stay away** - devices that are away when HA restarts correctly restore their away state; no unavailable flash or "entity no longer provided" warnings
+- **Access points as devices (beta)** - each AP in your cluster appears as a device with a **Connectivity** sensor (is the AP online?) and a **Clients** sensor (how many devices are connected to it), plus a **Total clients** sensor for the whole cluster. See [Access Points](#access-points-beta)
+- **Diagnostics download** - one click gives you a file to attach to bug reports, with device names, MAC addresses, IP addresses, SSIDs and serial numbers removed. See [Reporting a Problem or a New AP Model](#reporting-a-problem-or-a-new-ap-model)
 - **AP outages show as unavailable** - a single failed poll is ignored and the last known state is kept. If the IAP fails to answer 3 polls in a row, trackers become `unavailable` (rather than showing stale home/away) until it responds again. The outage and the recovery are each logged once. A device that has simply left is always `not_home`, never `unavailable`
 
 ## Requirements
@@ -94,6 +96,8 @@ The poll interval, track new devices toggle, and stale device cleanup settings a
 
 Turning **Track new devices** on from the switch or **Configure** also enables trackers that were created disabled while it was off. Trackers you disabled yourself stay disabled.
 
+**Access points as devices** is also under **Configure**. It is the one setting that reloads the integration when you change it, because it adds or removes a set of devices and entities. Your trackers are not affected.
+
 ## Changing the IP Address or Credentials
 
 To change the IP address, username, password, or certificate verification, open the integration card's **⋮** menu and choose **Reconfigure**. The connection is tested before anything is saved, then the integration reloads.
@@ -105,6 +109,43 @@ The password field is not pre-filled - leave it blank to keep the stored passwor
 One config entry covers a whole Instant cluster: add the Virtual Controller's IP once, and devices roaming between APs in that cluster stay a single tracker.
 
 If you also run a separate cluster or a standalone AP, add it as its own entry. A device seen by both gets one tracker per entry (for example `device_tracker.phone` and `device_tracker.phone_2`). Rename them to tell them apart, e.g. "Phone (Workshop)". To get a single home/away answer, add both trackers to the same [person](https://www.home-assistant.io/integrations/person/): a person is home if any of their network trackers is home.
+
+## Access Points (beta)
+
+> [!NOTE]
+> New in 2.2.0 and still in beta. It is **on by default**, including for existing installs when they upgrade. Turn it off under **Configure → Access points as devices** if you don't want it.
+
+Each access point in your cluster becomes a device in Home Assistant, named as it is on the controller (for example *LoungeAP*), with its model and serial number. Each AP device has:
+
+- **Connectivity** - **Connected** while the AP is part of the cluster, **Disconnected** when it drops out of the cluster (for example, powered off or rebooting)
+- **Clients** - how many devices are connected to that AP right now
+
+The IAP device also gets a **Total clients** sensor for the whole cluster.
+
+**How quickly it updates.** In testing on a AP cluster, an AP that lost power dropped out of the cluster within 1–1½ minutes, so **Connectivity** shows **Disconnected** within about 2 minutes, counting the time until the next poll. A rebooting AP rejoins about 3 minutes after power returns, and shows **Connected** as soon as it does.
+
+**While an AP is offline**, its **Clients** sensor is unavailable rather than showing 0, and the devices that were connected to it roam to other APs as usual. If Home Assistant restarts while an AP is offline, the AP still shows **Disconnected** rather than disappearing.
+
+**Use the Virtual Controller IP.** The access point list is read from the cluster's conductor (the AP currently running the Virtual Controller). Configure the integration with the **Virtual Controller IP** rather than a single AP's address, so it keeps working if a different AP takes over as conductor. To change it, use **Reconfigure** (see above).
+
+**What it costs.** One extra request to the AP per poll. The sensors only write to the recorder database when a value actually changes: an AP going offline or coming back, or a device joining or leaving.
+
+**Removing an AP for good.** An AP that goes offline keeps its device, so a reboot doesn't lose its name, area or customisations. To remove an AP you have retired, open its device page and choose **Delete**. Home Assistant only allows this once the AP is no longer in the cluster, because an AP that is still reporting would come straight back.
+
+**Turning it off** removes the AP devices and their sensors. Device trackers, and the IAP device's switches and settings, are not touched.
+
+> [!NOTE]
+> Clients are matched to APs by AP name. If two APs share a name their counts can't be told apart, and a warning is logged: give each AP a unique name on the controller.
+
+## Reporting a Problem or a New AP Model
+
+The integration has only been tested on a few AP models and firmware versions, so reports from other hardware are very welcome, whether everything works or not.
+
+1. Go to **Settings → Devices & services → Aruba Device Tracker**
+2. Open the **⋮** menu on your entry and choose **Download diagnostics**
+3. Open a [new issue](https://github.com/Jam3s97/Aruba_Device_Tracker/issues/new/choose): choose **Report an AP model or firmware**, or **Bug report** if something is broken, and attach the file
+
+The diagnostics file contains the raw client and access point tables from your AP, with device names, MAC addresses, IP addresses, IPv6 addresses, SSIDs, AP names and serial numbers replaced by placeholders. Your host, username and password are removed. It's worth a quick look before you attach it.
 
 ## Renaming Devices
 
@@ -132,6 +173,8 @@ This integration is designed so that a device sitting still costs **nothing**:
 - **`last_seen` and `days_until_cleanup` are only published while a device is away.** For a connected device "last seen" is always ~now, so it changed every poll while telling you nothing the `home` state didn't already.
 
 What remains - `access_point`, `essid`, `ip_address`, `os`, `channel` - only changes when something actually changes: the device roams to another AP, gets a new IP, or switches band. So a device that stays connected to the same AP writes one row when it arrives and one when it leaves.
+
+The [access point](#access-points-beta) sensors follow the same rule. They have no attributes, and only write a row when a count or an AP's connectivity actually changes.
 
 ## Default Away Timer Behaviour
 

@@ -92,6 +92,8 @@ Revisit when worth the CI change. What it needs:
 
 Verified 2026-09-29: the integration passes its full suite and imports cleanly on **both** 2026.3.2 and 2026.9.4, and every HA API it uses (`_get_reauth_entry`, `async_update_reload_and_abort(data_updates=...)`, coordinator `config_entry=`, `Store.async_delay_save`, `TextSelectorType.PASSWORD`) exists on the 2026.3.2 floor.
 
+Verified again 2026-10-23 for 2.2.0-beta.1: the full suite (170 tests) passes on both 2026.3.2 (a scratch virtualenv from `requirements.txt`) and 2026.9.4 (the dev container, which has drifted from the pin). 2026.9 is where the gap shows: it deprecates device-registry `via_device` and `add_/remove_config_entry_id` (both removed in 2027.8), and its `DeviceInfo` has `via_device_id`, which 2026.3.2 lacks. The AP feature avoids both deprecations (see Architecture). That is the kind of drift the dev/floor CI matrix would catch automatically.
+
 ### pytest-homeassistant-custom-component (parked)
 
 Not added. It is the only practical way to cover the config flow, options flow, reauth flow and the real `Store` per-entry migration, which currently have no automated tests. Costs measured 2026-09-29:
