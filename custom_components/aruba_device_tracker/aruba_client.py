@@ -69,20 +69,48 @@ class ArubaCertificateError(ArubaError):
 
 
 class ArubaClientData(TypedDict):
-    """A single Wi-Fi client as parsed from 'show clients' output."""
+    """
+    A single Wi-Fi client as parsed from 'show clients' output.
+
+    The AP can leave any column after the MAC blank (a client with no OS
+    fingerprint has an empty OS column), so those fields may be None.
+    """
 
     mac: str
     name: str
     ip: str
-    os: str
-    essid: str
-    access_point: str
-    channel: str
-    signal: str
+    os: str | None
+    essid: str | None
+    access_point: str | None
+    channel: str | None
+    signal: str | None
     speed: str | None
 
 
-# Parses each client row from 'show clients' output.
+_IPV4_PATTERN = r"(?:\d{1,3}\.){3}\d{1,3}"
+# MAC separators may be ":" or "-".
+_MAC_PATTERN = r"(?:[0-9a-f]{2}[:\-]){5}[0-9a-f]{2}"
+_IPV4_REGEX = re.compile(_IPV4_PATTERN)
+_MAC_REGEX = re.compile(_MAC_PATTERN, re.IGNORECASE)
+
+# Table headings are separated by two or more spaces, while a single space
+# joins the words of one heading ("IP Address", "Speed (mbps)").
+_HEADING_REGEX = re.compile(r"\S+(?: \S+)*")
+_HEADING_UNIT_REGEX = re.compile(r"\(.*?\)")
+_NON_ALNUM_REGEX = re.compile(r"[^a-z0-9]")
+
+# 'show clients' headings differ between firmware versions ("IP Address" vs
+# "IP"); every variant is mapped onto one key per column.
+_CLIENT_COLUMN_ALIASES = {
+    "ipaddress": "ip",
+    "macaddress": "mac",
+    "ipv6address": "ipv6",
+}
+_CLIENT_REQUIRED_COLUMNS = frozenset({"name", "ip", "mac"})
+
+# Fallback for output with no recognisable header line. Matches each column
+# as a single token, so a blank column shifts every later field left by one:
+# the table parser is preferred whenever the header is present.
 #
 # Columns: Name IP MAC OS ESSID AccessPoint Channel Type Role IPv6 Signal Speed
 #
@@ -93,12 +121,11 @@ class ArubaClientData(TypedDict):
 #     so lazy matching cannot short-circuit on an empty name field.
 #   - IPv6 may be "--" when not assigned.
 #   - Speed is optional — some rows omit it.
-#   - MAC separators may be ":" or "-".
 _CLIENT_REGEX = re.compile(
     r"^(?P<name>[^\n]*?)\s{2,}"
-    r"(?=(?:\d{1,3}\.){3}\d{1,3}\s)"
-    r"(?P<ip>(?:\d{1,3}\.){3}\d{1,3})\s+"
-    r"(?P<mac>(?:[0-9a-f]{2}[:\-]){5}[0-9a-f]{2})\s+"
+    rf"(?={_IPV4_PATTERN}\s)"
+    rf"(?P<ip>{_IPV4_PATTERN})\s+"
+    rf"(?P<mac>{_MAC_PATTERN})\s+"
     r"(?P<os>\S+)\s+"
     r"(?P<essid>\S+)\s+"
     r"(?P<access_point>\S+)\s+"
@@ -111,10 +138,8 @@ _CLIENT_REGEX = re.compile(
     re.IGNORECASE,
 )
 
-# Lines starting with these strings are header/separator/footer rows.
-_SKIP_PREFIXES = (
-    "name",
-    "----",
+# Lines starting with these strings are title or footer rows.
+_FOOTER_PREFIXES = (
     "client list",
     "num ",
     "total",
@@ -123,6 +148,139 @@ _SKIP_PREFIXES = (
     "number of",
     "info timestamp",
 )
+
+# The regex fallback cannot tell a header from data, so it skips these too.
+_SKIP_PREFIXES = ("name", "----", *_FOOTER_PREFIXES)
+
+
+def _column_key(heading: str, aliases: dict[str, str]) -> str:
+    """Reduce a column heading to a lookup key: 'Speed (mbps)' -> 'speed'."""
+    key = _NON_ALNUM_REGEX.sub("", _HEADING_UNIT_REGEX.sub("", heading).lower())
+    return aliases.get(key, key)
+
+
+def _find_columns(
+    lines: list[str], required: frozenset[str], aliases: dict[str, str]
+) -> tuple[int, list[tuple[str, int]]] | None:
+    """
+    Locate a table's header line and the offset where each column starts.
+
+    Returns the header's line index and its (key, offset) columns, or None if
+    no line carries every heading in ``required``.
+    """
+    for index, line in enumerate(lines):
+        columns = [
+            (_column_key(match.group(), aliases), match.start())
+            for match in _HEADING_REGEX.finditer(line)
+        ]
+        if required <= {key for key, _ in columns}:
+            return index, columns
+    return None
+
+
+def _slice_row(line: str, columns: list[tuple[str, int]]) -> dict[str, str]:
+    """
+    Cut a table row into columns at its header's offsets.
+
+    Aruba CLI tables are left-aligned, with each column padded to fit its
+    widest value, so every value starts at its heading's offset. Slicing
+    rather than splitting on whitespace keeps a blank cell blank instead of
+    shifting the rest of the row into the wrong columns.
+    """
+    ends = [start for _, start in columns[1:]] + [None]
+    return {
+        key: line[start:end].strip()
+        for (key, start), end in zip(columns, ends, strict=True)
+    }
+
+
+def _client_from_row(row: dict[str, str]) -> ArubaClientData | None:
+    """Build a client from a sliced table row, or None if it isn't one."""
+    mac = row.get("mac", "")
+    ip = row.get("ip", "")
+    if not _MAC_REGEX.fullmatch(mac) or not _IPV4_REGEX.fullmatch(ip):
+        return None
+    mac = format_mac(mac)
+    return ArubaClientData(
+        mac=mac,
+        name=row.get("name") or mac,
+        ip=ip,
+        os=row.get("os") or None,
+        essid=row.get("essid") or None,
+        access_point=row.get("accesspoint") or None,
+        channel=row.get("channel") or None,
+        signal=row.get("signal") or None,
+        speed=row.get("speed") or None,
+    )
+
+
+def _client_from_regex(line: str) -> ArubaClientData | None:
+    """Build a client from a raw line with the fallback regex."""
+    # Match on the RAW line (not stripped) so that empty-name rows retain
+    # their leading whitespace for the regex to anchor against.
+    match = _CLIENT_REGEX.match(line)
+    if not match:
+        return None
+    mac = format_mac(match.group("mac"))
+    return ArubaClientData(
+        mac=mac,
+        name=match.group("name").strip() or mac,
+        ip=match.group("ip"),
+        os=match.group("os"),
+        essid=match.group("essid"),
+        access_point=match.group("access_point"),
+        channel=match.group("channel"),
+        signal=match.group("signal"),
+        speed=match.group("speed"),
+    )
+
+
+def _is_rule(stripped: str) -> bool:
+    """Return True for a separator line made only of dashes."""
+    return set(stripped) <= {"-", " "}
+
+
+def _parse_clients(output: str) -> tuple[dict[str, ArubaClientData], list[str]]:
+    """
+    Parse 'show clients' output into clients keyed by MAC.
+
+    Returns the clients and the stripped lines that could not be parsed.
+    """
+    lines = output.splitlines()
+    located = _find_columns(lines, _CLIENT_REQUIRED_COLUMNS, _CLIENT_COLUMN_ALIASES)
+    clients: dict[str, ArubaClientData] = {}
+    skipped: list[str] = []
+
+    if located is None:
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped.lower().startswith(_SKIP_PREFIXES):
+                continue
+            client = _client_from_regex(line)
+            if client is None:
+                skipped.append(stripped)
+            else:
+                clients[client["mac"]] = client
+        return clients, skipped
+
+    header_index, columns = located
+    for line in lines[header_index + 1 :]:
+        stripped = line.strip()
+        if (
+            not stripped
+            or _is_rule(stripped)
+            or stripped.lower().startswith(_FOOTER_PREFIXES)
+        ):
+            continue
+        # A row that doesn't line up with the header (unexpected firmware
+        # formatting) falls back to the regex rather than dropping the
+        # client, which would mark a present device as away.
+        client = _client_from_row(_slice_row(line, columns)) or _client_from_regex(line)
+        if client is None:
+            skipped.append(stripped)
+        else:
+            clients[client["mac"]] = client
+    return clients, skipped
 
 
 class _LegacyTLSAdapter(HTTPAdapter):
@@ -482,34 +640,7 @@ class ArubaIAPClient:
         if output is None:
             return None
 
-        clients: dict[str, ArubaClientData] = {}
-        skipped: list[str] = []
-
-        for line in output.splitlines():
-            stripped = line.strip()
-
-            if not stripped or stripped.lower().startswith(_SKIP_PREFIXES):
-                continue
-
-            # Match on the RAW line (not stripped) so that empty-name rows
-            # retain their leading whitespace for the regex to anchor against.
-            match = _CLIENT_REGEX.match(line)
-            if match:
-                mac = format_mac(match.group("mac"))
-                name = match.group("name").strip() or mac
-                clients[mac] = ArubaClientData(
-                    mac=mac,
-                    name=name,
-                    ip=match.group("ip"),
-                    os=match.group("os"),
-                    essid=match.group("essid"),
-                    access_point=match.group("access_point"),
-                    channel=match.group("channel"),
-                    signal=match.group("signal"),
-                    speed=match.group("speed"),
-                )
-            elif stripped:
-                skipped.append(stripped)
+        clients, skipped = _parse_clients(output)
 
         if skipped:
             _LOGGER.debug(

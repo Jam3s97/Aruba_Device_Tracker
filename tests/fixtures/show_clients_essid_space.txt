@@ -1,0 +1,7 @@
+Client List
+-----------
+Name         IP Address     MAC Address        OS       ESSID       Access Point  Channel  Type  Role   IPv6 Address  Signal    Speed (mbps)  
+----         ----------     -----------        --       -----       ------------  -------  ----  ----   ------------  ------    ------------  
+guest-phone  192.0.2.80     02:00:00:00:01:01  Android  Guest WiFi  ExternalAP    161      AC    guest  --            44(good)  192(good)     
+Number of Clients   :1
+Info timestamp      :1000000
