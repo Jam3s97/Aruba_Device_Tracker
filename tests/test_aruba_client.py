@@ -1,5 +1,6 @@
 """Tests for ArubaIAPClient: auth, show-cmd parsing, and failure signatures."""
 
+from collections import Counter
 from unittest.mock import patch
 
 import pytest
@@ -179,6 +180,95 @@ class TestGetClientsParsing:
         )
 
         assert logged_in_client.get_clients() == {}
+
+
+class TestGetClientsColumns:
+    """Column-offset parsing, pinned against a real (anonymised) capture."""
+
+    @pytest.fixture
+    def parse(self, logged_in_client, requests_mock, raw_output):
+        def _parse(name: str | None = None, text: str | None = None):
+            cli_text = raw_output(name) if name else text
+            requests_mock.get(
+                show_cmd_url(sid="fake-sid-123"),
+                json={
+                    "Status": "Success",
+                    "Command output": cli_text.replace("\n", "\\n"),
+                },
+            )
+            return logged_in_client.get_clients()
+
+        return _parse
+
+    def test_real_output_parses_every_client(self, parse, caplog):
+        with caplog.at_level("DEBUG"):
+            clients = parse("show_clients_real.txt")
+
+        assert len(clients) == 32
+        per_ap = Counter(c["access_point"] for c in clients.values())
+        assert per_ap == {
+            "HallwayAP": 9,
+            "KitchenAP": 9,
+            "LoungeAP": 9,
+            "ExternalAP": 4,
+            "OfficeAP": 1,
+        }
+        # Title, rules and the "Number of Clients" footer are not data rows.
+        assert "did not match" not in caplog.text
+
+    def test_blank_os_column_does_not_shift_later_fields(self, parse):
+        """Regression: the regex read ESSID as OS, AP as ESSID, and so on."""
+        clients = parse("show_clients_real.txt")
+
+        assert clients["02:00:00:00:00:17"] == {
+            "mac": "02:00:00:00:00:17",
+            "name": "client-23",
+            "ip": "198.51.100.21",
+            "os": None,
+            "essid": "IoT",
+            "access_point": "HallwayAP",
+            "channel": "6",
+            "signal": "47(good)",
+            "speed": "72(good)",
+        }
+
+    def test_real_headings_with_units_are_recognised(self, parse):
+        client = parse("show_clients_real.txt")["02:00:00:00:00:01"]
+
+        assert client["ip"] == "192.0.2.112"
+        assert client["speed"] == "86(good)"
+
+    def test_essid_with_a_space(self, parse):
+        client = parse("show_clients_essid_space.txt")["02:00:00:00:01:01"]
+
+        assert client["essid"] == "Guest WiFi"
+        assert client["access_point"] == "ExternalAP"
+        assert client["channel"] == "161"
+
+    def test_output_without_a_header_falls_back_to_regex(self, parse):
+        text = (
+            "Kitchen Echo   192.168.1.50    aa:bb:cc:dd:ee:01  Android  HomeNet"
+            "   ap1          6        Wireless  Access  --    54      130M\n"
+        )
+
+        client = parse(text=text)["aa:bb:cc:dd:ee:01"]
+
+        assert client["name"] == "Kitchen Echo"
+        assert client["access_point"] == "ap1"
+
+    def test_misaligned_row_falls_back_to_regex_rather_than_dropping(self, parse):
+        """A row that doesn't line up with the header must not mark a device away."""
+        text = (
+            "Name           IP              MAC                OS       ESSID"
+            "     AccessPoint  Channel  Type      Role    IPv6  Signal  Speed\n"
+            "Echo  192.168.1.50  aa:bb:cc:dd:ee:01  Android  HomeNet  ap1  6"
+            "  Wireless  Access  --  54  130M\n"
+        )
+
+        client = parse(text=text)["aa:bb:cc:dd:ee:01"]
+
+        assert client["ip"] == "192.168.1.50"
+        assert client["access_point"] == "ap1"
 
 
 class TestAuthErrorPropagation:
