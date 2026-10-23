@@ -16,7 +16,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
     from homeassistant.core import HomeAssistant
-    from homeassistant.helpers.entity_platform import AddEntitiesCallback
+    from homeassistant.helpers.entity_platform import (
+        AddConfigEntryEntitiesCallback,
+    )
 
     from . import ArubaConfigEntry, ArubaIAPCoordinator
 
@@ -90,7 +92,7 @@ class ArubaAPEntity(CoordinatorEntity["ArubaIAPCoordinator"]):
 def async_setup_ap_entities(
     hass: HomeAssistant,
     entry: ArubaConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
     entity_class: type[ArubaAPEntity],
 ) -> None:
     """
@@ -106,13 +108,19 @@ def async_setup_ap_entities(
 
     @callback
     def _add(serials: Iterable[str]) -> None:
+        subentry_id = coordinator.ap_subentry_id
+        if subentry_id is None or subentry_id not in entry.subentries:
+            # The cluster group was just deleted; a reload follows.
+            return
         new: list[ArubaAPEntity] = []
         for serial in serials:
             if serial not in known:
                 known.add(serial)
                 new.append(entity_class(coordinator, serial, known.discard))
         if new:
-            async_add_entities(new)
+            # In the subentry, so the AP devices are grouped apart from the
+            # devices HA links to trackers by MAC.
+            async_add_entities(new, config_subentry_id=subentry_id)
 
     dev_reg = dr.async_get(hass)
     registered = sorted(

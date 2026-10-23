@@ -1,9 +1,9 @@
 """
 Sensor platform — client counts per access point and for the cluster.
 
-Only forwarded while the AP-devices option is on (see AP_PLATFORMS in
-__init__.py). Each AP's Clients sensor is counted from the client list, so it
-always agrees with the trackers. Total clients sits on the IAP control device.
+Total clients sits on the IAP control device and always exists. The per-AP
+Clients sensors are only added while the AP-devices option is on. Each is
+counted from the client list, so it always agrees with the trackers.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from .utils import get_device_info
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
-    from homeassistant.helpers.entity_platform import AddEntitiesCallback
+    from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
     from . import ArubaConfigEntry, ArubaIAPCoordinator
 
@@ -26,11 +26,16 @@ if TYPE_CHECKING:
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ArubaConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the client-count sensors."""
-    async_add_entities([ArubaTotalClientsSensor(entry.runtime_data)])
-    async_setup_ap_entities(hass, entry, async_add_entities, ArubaAPClientsSensor)
+    coordinator = entry.runtime_data
+    async_add_entities(
+        [ArubaTotalClientsSensor(coordinator)],
+        config_subentry_id=coordinator.ap_subentry_id,
+    )
+    if coordinator.ap_devices:
+        async_setup_ap_entities(hass, entry, async_add_entities, ArubaAPClientsSensor)
 
 
 class ArubaAPClientsSensor(ArubaAPEntity, SensorEntity):

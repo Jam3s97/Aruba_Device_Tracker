@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
+from homeassistant.config_entries import ConfigSubentry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import callback
 from homeassistant.exceptions import (
@@ -33,6 +35,8 @@ from .aruba_client import (
 )
 from .const import (
     CLEANUP_INTERVAL_HOURS,
+    CLUSTER_SUBENTRY_TITLE,
+    CLUSTER_SUBENTRY_TYPE,
     CONF_CLEANUP_DAYS,
     CONF_CLEANUP_ENABLED,
     CONF_ENABLE_AP_DEVICES,
@@ -63,12 +67,16 @@ BASE_PLATFORMS: list[Platform] = [
     Platform.DEVICE_TRACKER,
     Platform.SWITCH,
     Platform.NUMBER,
+    # Always: Total clients counts the client list and needs no 'show aps'.
+    # The per-AP Clients sensors on it are only added while the AP option is
+    # on (sensor.py).
+    Platform.SENSOR,
 ]
 
 # Forwarded only while the AP-devices option is on. Every entity on these
 # platforms belongs to that feature, which is what lets turning it off remove
 # them by domain.
-AP_PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.SENSOR]
+AP_PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR]
 
 type ArubaConfigEntry = ConfigEntry[ArubaIAPCoordinator]
 
@@ -141,6 +149,14 @@ async def async_setup_entry(
 
     entry.runtime_data = coordinator
 
+    coordinator.ap_subentry_id = _async_ensure_cluster_subentry(hass, entry)
+    # Devices from before the subentry existed (the IAP device on every
+    # install, and 2.2.0-beta.1's AP devices) are removed so they are
+    # recreated inside it. Entity settings and IDs are restored from the
+    # registry's deleted entries, so history carries on.
+    _async_remove_devices_outside_subentry(hass, entry, coordinator.ap_subentry_id)
+    entry.async_on_unload(entry.add_update_listener(_async_cluster_subentry_listener))
+
     if not ap_devices:
         # Run on every setup with the option off, not only when it is turned
         # off: that keeps it idempotent and also tidies up after a downgrade
@@ -177,11 +193,91 @@ async def async_setup_entry(
 
 
 @callback
+def _async_ensure_cluster_subentry(hass: HomeAssistant, entry: ArubaConfigEntry) -> str:
+    """
+    Return the id of the subentry grouping this integration's devices.
+
+    HA lists a config entry's devices grouped by subentry. Putting the IAP
+    device and the AP devices in one keeps them apart from the devices HA
+    links to trackers by MAC (another integration's vacuum or camera), which
+    land in "Devices that don't belong to a sub-entry". It exists whether or
+    not the AP option is on, because it holds the IAP device. It is created
+    in code, not by a subentry flow, so users can't add one themselves.
+    """
+    for subentry in entry.subentries.values():
+        if subentry.subentry_type == CLUSTER_SUBENTRY_TYPE:
+            if subentry.title != CLUSTER_SUBENTRY_TITLE:
+                # Keeps a renamed title in step on installs that already
+                # have the group.
+                hass.config_entries.async_update_subentry(
+                    entry, subentry, title=CLUSTER_SUBENTRY_TITLE
+                )
+            return subentry.subentry_id
+    subentry = ConfigSubentry(
+        data=MappingProxyType({}),
+        subentry_type=CLUSTER_SUBENTRY_TYPE,
+        title=CLUSTER_SUBENTRY_TITLE,
+        unique_id=CLUSTER_SUBENTRY_TYPE,
+    )
+    hass.config_entries.async_add_subentry(entry, subentry)
+    return subentry.subentry_id
+
+
+async def _async_cluster_subentry_listener(
+    hass: HomeAssistant, entry: ArubaConfigEntry
+) -> None:
+    """
+    Handle the cluster group being deleted in the UI.
+
+    Deleting the subentry removes every device in it, the IAP device
+    included, while the integration is still running. Treated as turning the
+    AP option off: the reload brings the IAP device back in a new group,
+    without the APs. Fires on every entry update (options writes included)
+    and only acts when the subentry has gone.
+    """
+    coordinator = entry.runtime_data
+    subentry_id = coordinator.ap_subentry_id
+    if subentry_id is None or subentry_id in entry.subentries:
+        return
+    # Cleared first: the update below fires this listener again, and the AP
+    # platforms must stop adding entities to the deleted subentry.
+    coordinator.ap_subentry_id = None
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, CONF_ENABLE_AP_DEVICES: False}
+    )
+    hass.config_entries.async_schedule_reload(entry.entry_id)
+
+
+@callback
+def _async_remove_devices_outside_subentry(
+    hass: HomeAssistant, entry: ArubaConfigEntry, subentry_id: str
+) -> None:
+    """
+    Remove this integration's own devices that aren't in the cluster subentry.
+
+    They are recreated inside it as their entities are added. Only devices
+    carrying one of this integration's identifiers (the IAP device and AP
+    devices) are considered: the devices HA links to trackers carry only a
+    MAC connection and stay where they are.
+    """
+    dev_reg = dr.async_get(hass)
+    for device in dr.async_entries_for_config_entry(dev_reg, entry.entry_id):
+        if not any(domain == DOMAIN for domain, _ in device.identifiers):
+            continue
+        if subentry_id in device.config_entries_subentries.get(entry.entry_id, set()):
+            continue
+        _async_remove_device(dev_reg, device, entry)
+
+
+@callback
 def _async_remove_ap_devices(hass: HomeAssistant, entry: ArubaConfigEntry) -> None:
     """
-    Remove this entry's AP entities and AP devices.
+    Remove this entry's AP devices and AP entities.
 
-    Tracker entities and the IAP control device are never touched.
+    Removing a device removes its entities, which covers the per-AP Clients
+    sensors. The sensor platform is shared with Total clients, so it isn't
+    cleared by domain. Tracker entities, the IAP control device and its
+    entities (Total clients included) are never touched.
     """
     ap_domains = {str(platform) for platform in AP_PLATFORMS}
     ent_reg = er.async_get(hass)
@@ -191,19 +287,23 @@ def _async_remove_ap_devices(hass: HomeAssistant, entry: ArubaConfigEntry) -> No
 
     dev_reg = dr.async_get(hass)
     for device in dr.async_entries_for_config_entry(dev_reg, entry.entry_id):
-        if not is_ap_device(device, entry.entry_id):
-            continue
-        if device.config_entries == {entry.entry_id}:
-            dev_reg.async_remove_device(device.id)
-        else:
-            # Before HA 2026.9 a device could belong to several config
-            # entries, so two entries for the same cluster shared AP devices:
-            # detach this one only. HA 2026.9+ gives each entry its own
-            # device (and deprecates remove_config_entry_id), so this branch
-            # never runs there.
-            dev_reg.async_update_device(
-                device.id, remove_config_entry_id=entry.entry_id
-            )
+        if is_ap_device(device, entry.entry_id):
+            _async_remove_device(dev_reg, device, entry)
+
+
+@callback
+def _async_remove_device(
+    dev_reg: dr.DeviceRegistry, device: dr.DeviceEntry, entry: ArubaConfigEntry
+) -> None:
+    """Remove ``device``, or only detach this entry from it if it is shared."""
+    if device.config_entries == {entry.entry_id}:
+        dev_reg.async_remove_device(device.id)
+    else:
+        # Before HA 2026.9 a device could belong to several config entries,
+        # so two entries for the same cluster shared AP devices: detach this
+        # one only. HA 2026.9+ gives each entry its own device (and
+        # deprecates remove_config_entry_id), so this branch never runs there.
+        dev_reg.async_update_device(device.id, remove_config_entry_id=entry.entry_id)
 
 
 async def async_remove_config_entry_device(
@@ -313,6 +413,8 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
         # which platforms were forwarded. Toggling it reloads the entry.
         self.ap_devices = ap_devices
         self.platforms = BASE_PLATFORMS + (AP_PLATFORMS if ap_devices else [])
+        # The subentry AP entities and devices belong to; set by setup.
+        self.ap_subentry_id: str | None = None
         # serial -> AP, last known. Kept on a failed 'show aps' so device
         # names survive; aps_ok says whether it is current.
         self.aps: dict[str, ArubaAP] = {}

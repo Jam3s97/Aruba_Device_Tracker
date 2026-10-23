@@ -115,12 +115,12 @@ If you also run a separate cluster or a standalone AP, add it as its own entry. 
 > [!NOTE]
 > New in 2.2.0 and still in beta. It is **on by default**, including for existing installs when they upgrade. Turn it off under **Configure → Access points as devices** if you don't want it.
 
-Each access point in your cluster becomes a device in Home Assistant, named as it is on the controller (for example *LoungeAP*), with its model and serial number. Each AP device has:
+Each access point in your cluster becomes a device in Home Assistant, named as it is on the controller (for example *LoungeAP*), with its model and serial number. On the integration's page they're listed together with the IAP device under a **Controller and access points** group, apart from any devices Home Assistant has linked to your trackers (such as a camera or vacuum another integration already knows about). Each AP device has:
 
 - **Connectivity** - **Connected** while the AP is part of the cluster, **Disconnected** when it drops out of the cluster (for example, powered off or rebooting)
 - **Clients** - how many devices are connected to that AP right now
 
-The IAP device also gets a **Total clients** sensor for the whole cluster.
+The IAP device also gets a **Total clients** sensor for the whole cluster. It counts the devices the trackers already see, so it stays even with access points as devices turned off.
 
 **How quickly it updates.** In testing on a AP cluster, an AP that lost power dropped out of the cluster within 1–1½ minutes, so **Connectivity** shows **Disconnected** within about 2 minutes, counting the time until the next poll. A rebooting AP rejoins about 3 minutes after power returns, and shows **Connected** as soon as it does.
 
@@ -132,7 +132,7 @@ The IAP device also gets a **Total clients** sensor for the whole cluster.
 
 **Removing an AP for good.** An AP that goes offline keeps its device, so a reboot doesn't lose its name, area or customisations. To remove an AP you have retired, open its device page and choose **Delete**. Home Assistant only allows this once the AP is no longer in the cluster, because an AP that is still reporting would come straight back.
 
-**Turning it off** removes the AP devices and their sensors. Device trackers, and the IAP device's switches and settings, are not touched.
+**Turning it off** removes the AP devices and their sensors. Device trackers, the IAP device's switches and settings, and **Total clients** are not touched. Deleting the **Controller and access points** group from its **⋮** menu does the same thing: the integration turns the option off and reloads, and the IAP device comes back in the group on its own.
 
 > [!NOTE]
 > Clients are matched to APs by AP name. If two APs share a name their counts can't be told apart, and a warning is logged: give each AP a unique name on the controller.

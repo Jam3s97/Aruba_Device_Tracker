@@ -2,6 +2,14 @@
 
 DOMAIN = "aruba_device_tracker"
 
+# The config subentry that groups this integration's own devices (the IAP
+# device and the AP devices) on the integration page, apart from the devices
+# HA links to trackers by MAC. It always exists, AP option on or off. The
+# type id predates the current title; changing it would orphan existing
+# subentries, so it stays.
+CLUSTER_SUBENTRY_TYPE = "access_points"
+CLUSTER_SUBENTRY_TITLE = "Controller and access points"
+
 # Shared by the IAP control device and the AP devices.
 MANUFACTURER = "Aruba Networks (HPE)"
 

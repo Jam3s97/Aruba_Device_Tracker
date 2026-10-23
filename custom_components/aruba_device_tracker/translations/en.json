@@ -120,5 +120,10 @@
         "name": "Connectivity"
       }
     }
+  },
+  "config_subentries": {
+    "access_points": {
+      "entry_type": "Aruba Instant cluster"
+    }
   }
 }

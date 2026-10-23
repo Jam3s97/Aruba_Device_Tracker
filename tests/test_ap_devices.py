@@ -39,6 +39,7 @@ from custom_components.aruba_device_tracker.sensor import (
 from tests.test_coordinator_cleanup import ENTRY_ID, make_coordinator
 
 OTHER_ENTRY_ID = "entry-b"
+SUBENTRY_ID = "sub-cluster"
 
 
 def make_ap_coordinator(**kwargs):
@@ -118,13 +119,20 @@ def ent_reg(monkeypatch):
     return registry
 
 
-def device(device_id: str, identifier: str | None, *entries: str):
+def device(
+    device_id: str,
+    identifier: str | None,
+    *entries: str,
+    subentry: str | None = None,
+):
     """Build a device entry with one identifier of ours, or none."""
     identifiers = {(DOMAIN, identifier)} if identifier else set()
+    config_entries = set(entries or {ENTRY_ID})
     return SimpleNamespace(
         id=device_id,
         identifiers=identifiers,
-        config_entries=set(entries or {ENTRY_ID}),
+        config_entries=config_entries,
+        config_entries_subentries={e: {subentry} for e in config_entries},
     )
 
 
@@ -322,7 +330,12 @@ class TestToggleOff:
     def test_removes_ap_entities_and_ap_devices_only(self, dev_reg, ent_reg):
         ent_reg.entries += [
             SimpleNamespace(
-                entity_id="sensor.lounge_clients",
+                entity_id="binary_sensor.lounge_connectivity",
+                domain="binary_sensor",
+                config_entry_id=ENTRY_ID,
+            ),
+            SimpleNamespace(
+                entity_id="sensor.total_clients",
                 domain="sensor",
                 config_entry_id=ENTRY_ID,
             ),
@@ -349,7 +362,9 @@ class TestToggleOff:
 
         integration._async_remove_ap_devices(SimpleNamespace(), entry)
 
-        assert ent_reg.removed == ["sensor.lounge_clients"]
+        # Total clients stays; the per-AP Clients sensors go with their
+        # devices, which HA does when a device is removed.
+        assert ent_reg.removed == ["binary_sensor.lounge_connectivity"]
         # Removed outright: on HA 2026.9+ a device has a single config entry,
         # and remove_config_entry_id is deprecated.
         assert dev_reg.updates == [("dev-ap", "removed")]
@@ -365,10 +380,75 @@ class TestToggleOff:
         assert dev_reg.updates == [("dev-ap", {"remove_config_entry_id": ENTRY_ID})]
 
 
+class TestMoveIntoSubentry:
+    def test_our_devices_outside_the_subentry_are_removed(self, dev_reg):
+        dev_reg.devices += [
+            device("dev-control-old", ENTRY_ID),  # IAP device, pre-subentry
+            device("dev-ap-old", "TESTSN0001"),  # beta.1 AP device
+            device("dev-ap-new", "TESTSN0002", subentry=SUBENTRY_ID),
+            device("dev-control-new", ENTRY_ID, subentry=SUBENTRY_ID),
+            device("dev-camera", None),  # linked to a tracker by MAC
+        ]
+
+        integration._async_remove_devices_outside_subentry(
+            SimpleNamespace(), SimpleNamespace(entry_id=ENTRY_ID), SUBENTRY_ID
+        )
+
+        assert dev_reg.updates == [
+            ("dev-control-old", "removed"),
+            ("dev-ap-old", "removed"),
+        ]
+
+
+class TestSubentryDeletedInTheUI:
+    def run(self, subentries, *, subentry_id=SUBENTRY_ID):
+        events: list = []
+        entry = SimpleNamespace(
+            entry_id=ENTRY_ID,
+            options={"scan_interval": 30},
+            subentries=subentries,
+            runtime_data=SimpleNamespace(ap_subentry_id=subentry_id),
+        )
+        hass = SimpleNamespace(
+            config_entries=SimpleNamespace(
+                async_update_entry=lambda _entry, options: events.append(
+                    ("save", options)
+                ),
+                async_schedule_reload=lambda entry_id: events.append(
+                    ("reload", entry_id)
+                ),
+            )
+        )
+        asyncio.run(integration._async_cluster_subentry_listener(hass, entry))
+        return events, entry
+
+    def test_deleting_the_group_turns_the_ap_option_off_and_reloads(self):
+        events, entry = self.run({})
+
+        assert events == [
+            ("save", {"scan_interval": 30, "enable_ap_devices": False}),
+            ("reload", ENTRY_ID),
+        ]
+        # Cleared, so the AP platforms stop adding to the deleted subentry.
+        assert entry.runtime_data.ap_subentry_id is None
+
+    def test_other_entry_updates_are_ignored(self):
+        """It also fires on every options write, e.g. from the switches."""
+        events, _ = self.run({SUBENTRY_ID: object()})
+
+        assert events == []
+
+    def test_runs_once(self):
+        """The options write above fires the listener again; it must not loop."""
+        events, _ = self.run({}, subentry_id=None)
+
+        assert events == []
+
+
 class TestSetupAndUnload:
     @pytest.fixture
     def setup_fakes(self, monkeypatch):
-        calls: dict[str, object] = {"removed": 0}
+        calls: dict[str, object] = {"removed": 0, "outside": [], "added": []}
 
         class FakeClient:
             def __init__(self, **kwargs) -> None:
@@ -380,6 +460,7 @@ class TestSetupAndUnload:
         class FakeCoordinator:
             def __init__(self, *, ap_devices, **kwargs) -> None:  # noqa: ARG002
                 self.platforms = ["base"] + (["ap"] if ap_devices else [])
+                self.ap_subentry_id = None
 
             async def async_load_last_seen(self) -> None:
                 pass
@@ -393,24 +474,41 @@ class TestSetupAndUnload:
         def _remove(hass, entry) -> None:  # noqa: ARG001
             calls["removed"] += 1
 
+        def _outside(hass, entry, subentry_id) -> None:  # noqa: ARG001
+            calls["outside"].append(subentry_id)
+
+        def _add_subentry(entry, subentry) -> bool:
+            calls["added"].append(subentry)
+            entry.subentries[subentry.subentry_id] = subentry
+            return True
+
         monkeypatch.setattr(integration, "ArubaIAPClient", FakeClient)
         monkeypatch.setattr(integration, "ArubaIAPCoordinator", FakeCoordinator)
         monkeypatch.setattr(integration, "_async_remove_ap_devices", _remove)
+        monkeypatch.setattr(
+            integration, "_async_remove_devices_outside_subentry", _outside
+        )
 
         async def _executor(func, *args):
             return func(*args)
 
         hass = SimpleNamespace(
             async_add_executor_job=_executor,
-            config_entries=SimpleNamespace(async_forward_entry_setups=_forward),
+            config_entries=SimpleNamespace(
+                async_forward_entry_setups=_forward,
+                async_add_subentry=_add_subentry,
+            ),
         )
         return hass, calls
 
-    def entry(self, options):
+    def entry(self, options, subentries=None):
         return SimpleNamespace(
             entry_id=ENTRY_ID,
             data={"host": "192.0.2.1", "username": "admin", "password": "pw"},
             options=options,
+            subentries=dict(subentries or {}),
+            add_update_listener=lambda listener: listener,
+            async_on_unload=lambda _unsub: None,
         )
 
     def test_upgraded_entry_without_the_option_gets_the_default_on(self, setup_fakes):
@@ -420,6 +518,65 @@ class TestSetupAndUnload:
 
         assert calls["forwarded"] == ["base", "ap"]
         assert calls["removed"] == 0
+
+    def test_the_cluster_subentry_is_created_and_devices_moved_into_it(
+        self, setup_fakes
+    ):
+        hass, calls = setup_fakes
+        entry = self.entry({})
+
+        asyncio.run(integration.async_setup_entry(hass, entry))
+
+        [subentry] = calls["added"]
+        assert subentry.subentry_type == "access_points"
+        assert subentry.title == "Controller and access points"
+        assert entry.runtime_data.ap_subentry_id == subentry.subentry_id
+        # Devices from before the subentry existed are recreated inside it.
+        assert calls["outside"] == [subentry.subentry_id]
+
+    def test_an_existing_cluster_subentry_is_reused(self, setup_fakes):
+        hass, calls = setup_fakes
+        existing = SimpleNamespace(
+            subentry_id=SUBENTRY_ID,
+            subentry_type="access_points",
+            title="Controller and access points",
+        )
+        entry = self.entry({}, {SUBENTRY_ID: existing})
+
+        asyncio.run(integration.async_setup_entry(hass, entry))
+
+        assert calls["added"] == []
+        assert entry.runtime_data.ap_subentry_id == SUBENTRY_ID
+
+    def test_an_existing_group_gets_the_current_title(self, setup_fakes):
+        """The prototype called it "Access points"; renames must reach it."""
+        hass, calls = setup_fakes
+        renamed: list = []
+        hass.config_entries.async_update_subentry = lambda _entry, subentry, title: (
+            renamed.append((subentry.subentry_id, title))
+        )
+        existing = SimpleNamespace(
+            subentry_id=SUBENTRY_ID,
+            subentry_type="access_points",
+            title="Access points",
+        )
+
+        asyncio.run(
+            integration.async_setup_entry(hass, self.entry({}, {SUBENTRY_ID: existing}))
+        )
+
+        assert renamed == [(SUBENTRY_ID, "Controller and access points")]
+        assert calls["added"] == []
+
+    def test_the_subentry_exists_even_with_the_option_off(self, setup_fakes):
+        """It holds the IAP device, so it isn't tied to the AP option."""
+        hass, calls = setup_fakes
+        entry = self.entry({"enable_ap_devices": False})
+
+        asyncio.run(integration.async_setup_entry(hass, entry))
+
+        assert len(calls["added"]) == 1
+        assert entry.runtime_data.ap_subentry_id is not None
 
     def test_option_off_forwards_base_platforms_and_cleans_up(self, setup_fakes):
         hass, calls = setup_fakes
@@ -438,8 +595,9 @@ class TestSetupAndUnload:
             Platform.DEVICE_TRACKER,
             Platform.SWITCH,
             Platform.NUMBER,
+            Platform.SENSOR,  # Total clients needs no 'show aps'
         ]
-        assert integration.AP_PLATFORMS == [Platform.BINARY_SENSOR, Platform.SENSOR]
+        assert integration.AP_PLATFORMS == [Platform.BINARY_SENSOR]
 
     def test_unload_uses_the_platforms_setup_forwarded(self):
         """Toggling the option must not change what the reload's unload expects."""
@@ -568,6 +726,8 @@ def fake_coordinator(**overrides):
         aps={LOUNGE["serial"]: LOUNGE},
         aps_ok=True,
         ap_client_counts={LOUNGE["serial"]: 3},
+        ap_subentry_id=SUBENTRY_ID,
+        ap_devices=True,
         data={"m1": {}, "m2": {}},
         last_update_success=True,
         listeners=[],
@@ -673,13 +833,22 @@ class TestConnectivitySensor:
         assert not sensor.extra_state_attributes
 
 
-def setup_platform(setup_entry, coordinator):
+def setup_platform(setup_entry, coordinator, *, subentry_ids=None, subentries=None):
     """Run a platform's async_setup_entry and return what it added."""
     added: list = []
     entry = SimpleNamespace(
-        entry_id=ENTRY_ID, runtime_data=coordinator, async_on_unload=lambda f: f
+        entry_id=ENTRY_ID,
+        runtime_data=coordinator,
+        async_on_unload=lambda f: f,
+        subentries={SUBENTRY_ID: object()} if subentries is None else subentries,
     )
-    asyncio.run(setup_entry(SimpleNamespace(), entry, added.extend))
+
+    def _add(entities, config_subentry_id=None) -> None:
+        added.extend(entities)
+        if subentry_ids is not None:
+            subentry_ids.append(config_subentry_id)
+
+    asyncio.run(setup_entry(SimpleNamespace(), entry, _add))
     return added
 
 
@@ -720,6 +889,32 @@ class TestPlatformSetup:
         info = by_serial["TESTSN0006"].device_info
         assert "name" not in info
         assert "model" not in info
+
+    def test_every_entity_goes_in_the_cluster_subentry(self, dev_reg):  # noqa: ARG002
+        """Total clients too: it is on the IAP device, which is in the group."""
+        subentry_ids: list = []
+
+        setup_platform(
+            sensor_setup_entry, fake_coordinator(), subentry_ids=subentry_ids
+        )
+        setup_platform(
+            binary_sensor_setup_entry, fake_coordinator(), subentry_ids=subentry_ids
+        )
+
+        assert subentry_ids == [SUBENTRY_ID, SUBENTRY_ID, SUBENTRY_ID]
+
+    def test_total_clients_without_the_ap_option(self, dev_reg):  # noqa: ARG002
+        added = setup_platform(sensor_setup_entry, fake_coordinator(ap_devices=False))
+
+        assert [type(e).__name__ for e in added] == ["ArubaTotalClientsSensor"]
+
+    def test_nothing_is_added_once_the_group_was_deleted(self, dev_reg):  # noqa: ARG002
+        """Between the deletion and the reload, polls must not add AP entities."""
+        added = setup_platform(
+            binary_sensor_setup_entry, fake_coordinator(), subentries={}
+        )
+
+        assert added == []
 
     def test_ap_comes_back_after_its_device_was_deleted(self, dev_reg):  # noqa: ARG002
         """A deleted retired AP that reappears must get entities again."""
