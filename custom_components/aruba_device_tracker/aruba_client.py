@@ -445,6 +445,10 @@ class ArubaIAPClient:
         # Commands whose last non-Success status has already been warned
         # about. See _show_cmd.
         self._refused_cmds: set[str] = set()
+        # The last successful raw output of each command, for the diagnostics
+        # download. Kept rather than re-fetched: a diagnostics request running
+        # beside a poll would share the session and could race the re-login.
+        self.last_outputs: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Redaction
@@ -709,7 +713,9 @@ class ArubaIAPClient:
 
         self._refused_cmds.discard(cmd)
         raw: str = data.get("Command output", "")
-        return raw.replace("\\n", "\n").replace("\\r", "\r")
+        output = raw.replace("\\n", "\n").replace("\\r", "\r")
+        self.last_outputs[cmd] = output
+        return output
 
     def _fetch_show_cmd(self, cmd: str) -> dict[str, Any]:
         """
