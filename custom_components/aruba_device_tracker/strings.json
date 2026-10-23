@@ -123,7 +123,11 @@
   },
   "config_subentries": {
     "access_points": {
-      "entry_type": "Aruba Instant cluster"
+      "entry_type": "Aruba Instant cluster",
+      "initiate_flow": {
+        "user": "Add controller and access points"
+      },
+      "step": {}
     }
   }
 }
