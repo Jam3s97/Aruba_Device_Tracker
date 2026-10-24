@@ -86,6 +86,38 @@ def find_ap_device(
     )
 
 
+def device_in_subentry(device: DeviceEntry, entry_id: str, subentry_id: str) -> bool:
+    """
+    Return True if ``device`` is in this entry's subentry ``subentry_id``.
+
+    HA 2026.9 gave each device a single config entry and subentry
+    (``config_entry_id`` / ``config_subentry_id``), and 2026.10 deprecates
+    the old multi-entry attributes (``config_entries``,
+    ``config_entries_subentries``), which are plain fields on the 2026.3
+    floor. Which one the device has tells which model this HA uses, so the
+    deprecated names are never touched on new HA.
+    """
+    if hasattr(device, "config_subentry_id"):
+        return (
+            device.config_entry_id == entry_id
+            and device.config_subentry_id == subentry_id
+        )
+    return subentry_id in device.config_entries_subentries.get(entry_id, set())
+
+
+def device_only_in_entry(device: DeviceEntry, entry_id: str) -> bool:
+    """
+    Return True if ``device`` belongs to this config entry and no other.
+
+    Always true on HA 2026.9+, where a device has a single config entry. On
+    the 2026.3 floor a device can be shared between entries. See
+    device_in_subentry for why both models are handled.
+    """
+    if hasattr(device, "config_entry_id"):
+        return device.config_entry_id == entry_id
+    return device.config_entries == {entry_id}
+
+
 def is_ap_device(device: DeviceEntry, entry_id: str) -> bool:
     """
     Return True if ``device`` is one of this integration's AP devices.

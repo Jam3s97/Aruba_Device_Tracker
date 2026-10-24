@@ -74,15 +74,29 @@ def device(
     identifier: str | None,
     *entries: str,
     subentry: str | None = None,
+    legacy: bool = False,
 ):
-    """Build a device entry with one identifier of ours, or none."""
+    """
+    Build a device entry with one identifier of ours, or none.
+
+    By default it has HA 2026.9+'s single-entry fields only, and none of the
+    deprecated multi-entry attributes, so any use of those fails the test.
+    ``legacy`` (implied by several entries) builds the 2026.3 shape instead.
+    """
     identifiers = {(DOMAIN, identifier)} if identifier else set()
-    config_entries = set(entries or {ENTRY_ID})
+    entries = entries or (ENTRY_ID,)
+    if legacy or len(entries) > 1:
+        return SimpleNamespace(
+            id=device_id,
+            identifiers=identifiers,
+            config_entries=set(entries),
+            config_entries_subentries={e: {subentry} for e in entries},
+        )
     return SimpleNamespace(
         id=device_id,
         identifiers=identifiers,
-        config_entries=config_entries,
-        config_entries_subentries={e: {subentry} for e in config_entries},
+        config_entry_id=entries[0],
+        config_subentry_id=subentry,
     )
 
 
@@ -348,6 +362,19 @@ class TestToggleOff:
 
 
 class TestMoveIntoSubentry:
+    def test_on_ha_2026_3_too(self, dev_reg):
+        """The floor's devices have the multi-entry fields instead."""
+        dev_reg.devices += [
+            device("dev-ap-old", "TESTSN0001", legacy=True),
+            device("dev-ap-new", "TESTSN0002", subentry=SUBENTRY_ID, legacy=True),
+        ]
+
+        integration._async_remove_devices_outside_subentry(
+            SimpleNamespace(), SimpleNamespace(entry_id=ENTRY_ID), SUBENTRY_ID
+        )
+
+        assert dev_reg.updates == [("dev-ap-old", "removed")]
+
     def test_our_devices_outside_the_subentry_are_removed(self, dev_reg):
         dev_reg.devices += [
             device("dev-control-old", ENTRY_ID),  # IAP device, pre-subentry

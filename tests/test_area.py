@@ -60,8 +60,8 @@ def lounge_device(area_id: str | None):
     return SimpleNamespace(
         id="dev-lounge",
         identifiers={(DOMAIN, LOUNGE["serial"])},
-        config_entries={ENTRY_ID},
-        config_entries_subentries={ENTRY_ID: {None}},
+        config_entry_id=ENTRY_ID,
+        config_subentry_id=None,
         area_id=area_id,
     )
 
@@ -94,7 +94,8 @@ class TestState:
             SimpleNamespace(
                 id="dev-kitchen",
                 identifiers={(DOMAIN, "TESTSN0002")},
-                config_entries={ENTRY_ID},
+                config_entry_id=ENTRY_ID,
+                config_subentry_id=None,
                 area_id="kitchen",
             )
         )

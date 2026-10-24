@@ -59,6 +59,8 @@ from .const import (
 )
 from .utils import (
     area_unique_id,
+    device_in_subentry,
+    device_only_in_entry,
     find_ap_device,
     is_ap_device,
     is_area_unique_id,
@@ -281,7 +283,7 @@ def _async_remove_devices_outside_subentry(
     for device in dr.async_entries_for_config_entry(dev_reg, entry.entry_id):
         if not any(domain == DOMAIN for domain, _ in device.identifiers):
             continue
-        if subentry_id in device.config_entries_subentries.get(entry.entry_id, set()):
+        if device_in_subentry(device, entry.entry_id, subentry_id):
             continue
         _async_remove_device(dev_reg, device, entry)
 
@@ -329,7 +331,7 @@ def _async_remove_device(
     dev_reg: dr.DeviceRegistry, device: dr.DeviceEntry, entry: ArubaConfigEntry
 ) -> None:
     """Remove ``device``, or only detach this entry from it if it is shared."""
-    if device.config_entries == {entry.entry_id}:
+    if device_only_in_entry(device, entry.entry_id):
         dev_reg.async_remove_device(device.id)
     else:
         # Before HA 2026.9 a device could belong to several config entries,

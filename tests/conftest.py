@@ -115,7 +115,13 @@ def dev_reg(monkeypatch):
     monkeypatch.setattr(
         dr,
         "async_entries_for_config_entry",
-        lambda reg, entry_id: [d for d in reg.devices if entry_id in d.config_entries],
+        lambda reg, entry_id: [
+            d
+            for d in reg.devices
+            # HA 2026.9+'s single entry, or 2026.3's set of entries.
+            if getattr(d, "config_entry_id", None) == entry_id
+            or entry_id in getattr(d, "config_entries", ())
+        ],
     )
     return registry
 
