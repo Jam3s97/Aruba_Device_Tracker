@@ -16,7 +16,7 @@ from homeassistant.helpers.device_registry import format_mac
 from requests.adapters import HTTPAdapter
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -107,6 +107,21 @@ class ArubaAP(TypedDict):
     clients: int | None
 
 
+class ArubaNetwork(TypedDict):
+    """
+    A configured network (SSID profile) as parsed from 'show network'.
+
+    Keyed by profile name, which stays the same if the broadcast SSID is
+    renamed. Clients report the broadcast SSID (``essid``), which can differ
+    from the profile name.
+    """
+
+    profile: str
+    essid: str
+    enabled: bool
+    clients: int | None
+
+
 _IPV4_PATTERN = r"(?:\d{1,3}\.){3}\d{1,3}"
 # MAC separators may be ":" or "-".
 _MAC_PATTERN = r"(?:[0-9a-f]{2}[:\-]){5}[0-9a-f]{2}"
@@ -179,6 +194,10 @@ _AP_REQUIRED_COLUMNS = frozenset({"name", "ip", "serial"})
 _SERIAL_REGEX = re.compile(r"[A-Za-z0-9]+")
 # Type reads e.g. "505(indoor)" or "365(outdoor)".
 _AP_TYPE_REGEX = re.compile(r"(?P<model>\d+[A-Za-z]*)(?:\(.*\))?")
+# 'show network' columns. Profile name is the key; ESSID is what clients
+# report.
+_NETWORK_COLUMN_ALIASES: dict[str, str] = {}
+_NETWORK_REQUIRED_COLUMNS = frozenset({"profilename", "essid"})
 # Aruba fills an empty table cell with "-" or "--".
 _EMPTY_CELLS = frozenset({"", "-", "--"})
 
@@ -379,6 +398,50 @@ def _parse_aps(output: str) -> tuple[dict[str, ArubaAP], list[str]] | None:
         else:
             aps[ap["serial"]] = ap
     return aps, skipped
+
+
+def _network_from_row(row: dict[str, str]) -> ArubaNetwork | None:
+    """Build a network from a sliced 'show network' row, or None."""
+    profile = _cell(row, "profilename")
+    essid = _cell(row, "essid")
+    if profile is None or essid is None:
+        return None
+    status = _cell(row, "status")
+    clients = _cell(row, "clients")
+    return ArubaNetwork(
+        profile=profile,
+        essid=essid,
+        # A firmware without the Status column: assume enabled rather than
+        # mark every network unavailable.
+        enabled=status is None or status.lower() == "enabled",
+        clients=int(clients) if clients is not None and clients.isdigit() else None,
+    )
+
+
+def _parse_networks(
+    output: str,
+) -> tuple[dict[str, ArubaNetwork], list[str]] | None:
+    """
+    Parse 'show network' output into networks keyed by profile name.
+
+    Returns the networks and the stripped lines that could not be parsed, or
+    None if the output has no recognisable header.
+    """
+    lines = output.splitlines()
+    located = _find_columns(lines, _NETWORK_REQUIRED_COLUMNS, _NETWORK_COLUMN_ALIASES)
+    if located is None:
+        return None
+
+    header_index, columns = located
+    networks: dict[str, ArubaNetwork] = {}
+    skipped: list[str] = []
+    for line, stripped in _table_rows(lines, header_index):
+        network = _network_from_row(_slice_row(line, columns))
+        if network is None:
+            skipped.append(stripped)
+        else:
+            networks[network["profile"]] = network
+    return networks, skipped
 
 
 class _LegacyTLSAdapter(HTTPAdapter):
@@ -776,25 +839,51 @@ class ArubaIAPClient:
             ArubaAuthError: The AP rejected the credentials.
 
         """
-        output = self._show_cmd("show aps")
+        return self._get_table("show aps", _parse_aps, "access points")
+
+    def get_networks(self) -> dict[str, ArubaNetwork] | None:
+        """
+        Return the cluster's configured networks keyed by profile name.
+
+        Every configured network is listed, including ones with no clients and
+        disabled ones. Returns None if the API call failed or the output has
+        no network table.
+
+        Raises:
+            ArubaAuthError: The AP rejected the credentials.
+
+        """
+        return self._get_table("show network", _parse_networks, "networks")
+
+    def _get_table[T](
+        self,
+        cmd: str,
+        parse: Callable[[str], tuple[dict[str, T], list[str]] | None],
+        what: str,
+    ) -> dict[str, T] | None:
+        """Run a show command and parse its table, logging what didn't fit."""
+        output = self._show_cmd(cmd)
         if output is None:
             return None
 
-        parsed = _parse_aps(output)
+        parsed = parse(output)
         if parsed is None:
             _LOGGER.debug(
-                "Aruba IAP: 'show aps' output has no AP table header: %r",
+                "Aruba IAP: '%s' output has no %s table header: %r",
+                cmd,
+                what,
                 self._redact(output[:_DEBUG_BODY_SNIPPET_LEN]),
             )
             return None
 
-        aps, skipped = parsed
+        rows, skipped = parsed
         if skipped:
             _LOGGER.debug(
-                "Aruba IAP: %d line(s) did not match the AP table:\n%s",
+                "Aruba IAP: %d line(s) did not match the %s table:\n%s",
                 len(skipped),
+                what,
                 "\n".join(f"  > {s}" for s in skipped),
             )
 
-        _LOGGER.debug("Aruba IAP found %d access points", len(aps))
-        return aps
+        _LOGGER.debug("Aruba IAP found %d %s", len(rows), what)
+        return rows

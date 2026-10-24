@@ -59,64 +59,14 @@ def ap(serial: str, name: str, clients: int | None = None) -> ArubaAP:
     )
 
 
-def client(mac: str, access_point: str | None) -> dict:
-    """Build the fields of a parsed client that the AP feature reads."""
-    return {"mac": mac, "name": mac, "access_point": access_point}
+def client(mac: str, access_point: str | None, essid: str | None = None) -> dict:
+    """Build the fields of a parsed client that the AP and network features read."""
+    return {"mac": mac, "name": mac, "access_point": access_point, "essid": essid}
 
 
 LOUNGE = ap("TESTSN0001", "LoungeAP")
 KITCHEN = ap("TESTSN0002", "KitchenAP")
 GARDEN = ap("TESTSN0003", "GardenAP")
-
-
-class FakeDeviceRegistry:
-    def __init__(self, devices=()) -> None:
-        self.devices = list(devices)
-        self.updates: list[tuple[str, dict]] = []
-
-    def async_get_device(self, identifiers):
-        return next((d for d in self.devices if d.identifiers & identifiers), None)
-
-    def async_update_device(self, device_id, **changes) -> None:
-        self.updates.append((device_id, changes))
-
-    def async_remove_device(self, device_id) -> None:
-        self.updates.append((device_id, "removed"))
-
-
-class FakeEntityRegistry:
-    def __init__(self, entries=()) -> None:
-        self.entries = list(entries)
-        self.removed: list[str] = []
-
-    def async_remove(self, entity_id) -> None:
-        self.removed.append(entity_id)
-
-
-@pytest.fixture
-def dev_reg(monkeypatch):
-    """Route the device registry helpers to a fake."""
-    registry = FakeDeviceRegistry()
-    monkeypatch.setattr(integration.dr, "async_get", lambda _hass: registry)
-    monkeypatch.setattr(
-        integration.dr,
-        "async_entries_for_config_entry",
-        lambda reg, entry_id: [d for d in reg.devices if entry_id in d.config_entries],
-    )
-    return registry
-
-
-@pytest.fixture
-def ent_reg(monkeypatch):
-    """Route the entity registry helpers to a fake."""
-    registry = FakeEntityRegistry()
-    monkeypatch.setattr(integration.er, "async_get", lambda _hass: registry)
-    monkeypatch.setattr(
-        integration.er,
-        "async_entries_for_config_entry",
-        lambda reg, entry_id: [e for e in reg.entries if e.config_entry_id == entry_id],
-    )
-    return registry
 
 
 def device(
@@ -331,24 +281,37 @@ class TestToggleOff:
         ent_reg.entries += [
             SimpleNamespace(
                 entity_id="binary_sensor.lounge_connectivity",
+                unique_id=f"{ENTRY_ID}_TESTSN0001_connectivity",
                 domain="binary_sensor",
                 config_entry_id=ENTRY_ID,
             ),
             SimpleNamespace(
                 entity_id="sensor.total_clients",
+                unique_id=f"{ENTRY_ID}_total_clients",
+                domain="sensor",
+                config_entry_id=ENTRY_ID,
+            ),
+            SimpleNamespace(
+                entity_id="sensor.phone_area",
+                unique_id=f"{ENTRY_ID}_area_aa:bb:cc:dd:ee:01",
                 domain="sensor",
                 config_entry_id=ENTRY_ID,
             ),
             SimpleNamespace(
                 entity_id="device_tracker.phone",
+                unique_id=f"{ENTRY_ID}_aa:bb:cc:dd:ee:01",
                 domain="device_tracker",
                 config_entry_id=ENTRY_ID,
             ),
             SimpleNamespace(
-                entity_id="switch.track_new", domain="switch", config_entry_id=ENTRY_ID
+                entity_id="switch.track_new",
+                unique_id=f"{ENTRY_ID}_track_new_devices",
+                domain="switch",
+                config_entry_id=ENTRY_ID,
             ),
             SimpleNamespace(
                 entity_id="sensor.other_entry",
+                unique_id=f"{OTHER_ENTRY_ID}_area_aa:bb:cc:dd:ee:01",
                 domain="sensor",
                 config_entry_id=OTHER_ENTRY_ID,
             ),
@@ -364,7 +327,11 @@ class TestToggleOff:
 
         # Total clients stays; the per-AP Clients sensors go with their
         # devices, which HA does when a device is removed.
-        assert ent_reg.removed == ["binary_sensor.lounge_connectivity"]
+        # Area sensors have no device, so they are removed by unique ID.
+        assert sorted(ent_reg.removed) == [
+            "binary_sensor.lounge_connectivity",
+            "sensor.phone_area",
+        ]
         # Removed outright: on HA 2026.9+ a device has a single config entry,
         # and remove_config_entry_id is deprecated.
         assert dev_reg.updates == [("dev-ap", "removed")]
@@ -458,9 +425,10 @@ class TestSetupAndUnload:
                 pass
 
         class FakeCoordinator:
-            def __init__(self, *, ap_devices, **kwargs) -> None:  # noqa: ARG002
+            def __init__(self, *, ap_devices, area_sensors, **kwargs) -> None:  # noqa: ARG002
                 self.platforms = ["base"] + (["ap"] if ap_devices else [])
                 self.ap_subentry_id = None
+                calls["area_sensors"] = area_sensors
 
             async def async_load_last_seen(self) -> None:
                 pass
@@ -474,6 +442,9 @@ class TestSetupAndUnload:
         def _remove(hass, entry) -> None:  # noqa: ARG001
             calls["removed"] += 1
 
+        def _remove_area(hass, entry) -> None:  # noqa: ARG001
+            calls["area_removed"] = calls.get("area_removed", 0) + 1
+
         def _outside(hass, entry, subentry_id) -> None:  # noqa: ARG001
             calls["outside"].append(subentry_id)
 
@@ -485,6 +456,7 @@ class TestSetupAndUnload:
         monkeypatch.setattr(integration, "ArubaIAPClient", FakeClient)
         monkeypatch.setattr(integration, "ArubaIAPCoordinator", FakeCoordinator)
         monkeypatch.setattr(integration, "_async_remove_ap_devices", _remove)
+        monkeypatch.setattr(integration, "_async_remove_area_sensors", _remove_area)
         monkeypatch.setattr(
             integration, "_async_remove_devices_outside_subentry", _outside
         )
@@ -590,6 +562,55 @@ class TestSetupAndUnload:
         assert calls["forwarded"] == ["base"]
         assert calls["removed"] == 1
 
+    def test_area_sensors_are_off_by_default(self, setup_fakes):
+        """Opt-in; an upgraded entry without the option gets none."""
+        hass, calls = setup_fakes
+
+        asyncio.run(integration.async_setup_entry(hass, self.entry({})))
+
+        assert calls["area_sensors"] is False
+        assert calls["area_removed"] == 1  # tidies up any left from earlier
+
+    def test_area_sensors_turned_on(self, setup_fakes):
+        hass, calls = setup_fakes
+
+        asyncio.run(
+            integration.async_setup_entry(
+                hass, self.entry({"enable_area_sensors": True})
+            )
+        )
+
+        assert calls["area_sensors"] is True
+        assert "area_removed" not in calls
+
+    def test_area_sensors_off_removes_them(self, setup_fakes):
+        hass, calls = setup_fakes
+
+        asyncio.run(
+            integration.async_setup_entry(
+                hass, self.entry({"enable_area_sensors": False})
+            )
+        )
+
+        assert calls["area_sensors"] is False
+        assert calls["area_removed"] == 1
+        assert calls["removed"] == 0  # AP devices stay
+
+    def test_area_sensors_need_ap_devices(self, setup_fakes):
+        """The option on, AP devices off: no Area sensors, as nothing has an area."""
+        hass, calls = setup_fakes
+
+        asyncio.run(
+            integration.async_setup_entry(
+                hass,
+                self.entry({"enable_ap_devices": False, "enable_area_sensors": True}),
+            )
+        )
+
+        assert calls["area_sensors"] is False
+        # AP-devices cleanup removes the Area sensors too.
+        assert calls["removed"] == 1
+
     def test_platform_lists(self):
         assert integration.BASE_PLATFORMS == [
             Platform.DEVICE_TRACKER,
@@ -664,7 +685,38 @@ BASE_OPTIONS = {
     "scan_interval": 30,
     "cleanup_enabled": True,
     "cleanup_days": 30,
+    "enable_area_sensors": False,
 }
+
+
+class TestSetupFlowAsksAboutAPs:
+    def run(self, user_input=None):
+        class Flow(config_flow.ArubaIAPConfigFlow):
+            pass
+
+        flow = Flow()
+        flow.hass = SimpleNamespace()
+        flow._connection_data = {"host": "192.0.2.1", "username": "u", "password": "p"}
+        return asyncio.run(flow.async_step_tracking(user_input))
+
+    def test_both_options_are_on_the_form_with_their_defaults(self):
+        schema = self.run()["data_schema"].schema
+        defaults = {str(key): key.default() for key in schema}
+
+        assert defaults["enable_ap_devices"] is True
+        assert defaults["enable_area_sensors"] is False
+
+    def test_the_answers_are_saved_with_the_entry(self):
+        result = self.run(
+            {
+                **BASE_OPTIONS,
+                "enable_ap_devices": False,
+                "enable_area_sensors": True,
+            }
+        )
+
+        assert result["data"]["enable_ap_devices"] is False
+        assert result["data"]["enable_area_sensors"] is True
 
 
 class TestOptionsFlowReload:
@@ -705,6 +757,17 @@ class TestOptionsFlowReload:
         assert events == [("save", user_input), ("reload", ENTRY_ID)]
         assert result["data"] == user_input
 
+    def test_turning_area_sensors_on_saves_then_reloads(self):
+        user_input = {
+            **BASE_OPTIONS,
+            "enable_ap_devices": True,
+            "enable_area_sensors": True,
+        }
+
+        events, _ = self.run({}, user_input)
+
+        assert events == [("save", user_input), ("reload", ENTRY_ID)]
+
     def test_other_changes_do_not_reload(self):
         events, _ = self.run(
             {"enable_ap_devices": True},
@@ -722,18 +785,30 @@ class TestOptionsFlowReload:
 def fake_coordinator(**overrides):
     """Build a coordinator stand-in carrying what the sensors read."""
     coordinator = SimpleNamespace(
-        config_entry=SimpleNamespace(entry_id=ENTRY_ID, data={"host": "192.0.2.5"}),
+        config_entry=SimpleNamespace(
+            entry_id=ENTRY_ID, data={"host": "192.0.2.5"}, options={}
+        ),
         aps={LOUNGE["serial"]: LOUNGE},
         aps_ok=True,
         ap_client_counts={LOUNGE["serial"]: 3},
         ap_subentry_id=SUBENTRY_ID,
         ap_devices=True,
+        area_sensors=True,
+        networks={},
+        networks_ok=True,
+        network_client_counts={},
+        last_seen={},
+        ap_serial_by_name={"LoungeAP": LOUNGE["serial"]},
+        removal_listeners=[],
         data={"m1": {}, "m2": {}},
         last_update_success=True,
         listeners=[],
     )
     coordinator.async_add_listener = lambda cb: (
         coordinator.listeners.append(cb) or (lambda: None)
+    )
+    coordinator.async_add_removal_listener = lambda cb: (
+        coordinator.removal_listeners.append(cb) or (lambda: None)
     )
     for key, value in overrides.items():
         setattr(coordinator, key, value)
@@ -833,6 +908,12 @@ class TestConnectivitySensor:
         assert not sensor.extra_state_attributes
 
 
+def poll_listeners(coordinator) -> None:
+    """Fire every coordinator listener, as a completed poll does."""
+    for listener in list(coordinator.listeners):
+        listener()
+
+
 def setup_platform(setup_entry, coordinator, *, subentry_ids=None, subentries=None):
     """Run a platform's async_setup_entry and return what it added."""
     added: list = []
@@ -841,32 +922,40 @@ def setup_platform(setup_entry, coordinator, *, subentry_ids=None, subentries=No
         runtime_data=coordinator,
         async_on_unload=lambda f: f,
         subentries={SUBENTRY_ID: object()} if subentries is None else subentries,
+        options=coordinator.config_entry.options,
+        data=coordinator.config_entry.data,
     )
 
     def _add(entities, config_subentry_id=None) -> None:
         added.extend(entities)
         if subentry_ids is not None:
-            subentry_ids.append(config_subentry_id)
+            subentry_ids.extend(
+                (type(e).__name__, config_subentry_id) for e in entities
+            )
 
-    asyncio.run(setup_entry(SimpleNamespace(), entry, _add))
+    hass = SimpleNamespace(
+        bus=SimpleNamespace(async_listen=lambda *_args, **_kwargs: lambda: None)
+    )
+    asyncio.run(setup_entry(hass, entry, _add))
     return added
 
 
 class TestPlatformSetup:
-    def test_sensors_for_new_aps_are_added_on_later_polls(self, dev_reg):  # noqa: ARG002
+    def test_sensors_for_new_aps_are_added_on_later_polls(self, dev_reg, ent_reg):  # noqa: ARG002
         coordinator = fake_coordinator()
 
         added = setup_platform(sensor_setup_entry, coordinator)
-        assert [type(e).__name__ for e in added] == [
-            "ArubaTotalClientsSensor",
-            "ArubaAPClientsSensor",
-        ]
+        ap_sensors = [e for e in added if isinstance(e, ArubaAPClientsSensor)]
+        assert [e.unique_id for e in ap_sensors] == [f"{ENTRY_ID}_TESTSN0001_clients"]
 
         coordinator.aps = {**coordinator.aps, KITCHEN["serial"]: KITCHEN}
-        coordinator.listeners[0]()
-        coordinator.listeners[0]()  # a second poll adds nothing more
+        poll_listeners(coordinator)
+        poll_listeners(coordinator)  # a second poll adds nothing more
 
-        assert [e.unique_id for e in added[2:]] == [f"{ENTRY_ID}_TESTSN0002_clients"]
+        ap_sensors = [e for e in added if isinstance(e, ArubaAPClientsSensor)]
+        assert [e.unique_id for e in ap_sensors[1:]] == [
+            f"{ENTRY_ID}_TESTSN0002_clients"
+        ]
 
     def test_ap_that_is_off_at_startup_still_gets_entities(self, dev_reg):
         """Seeded from the registry, so it reads Disconnected, not missing."""
@@ -890,20 +979,35 @@ class TestPlatformSetup:
         assert "name" not in info
         assert "model" not in info
 
-    def test_every_entity_goes_in_the_cluster_subentry(self, dev_reg):  # noqa: ARG002
-        """Total clients too: it is on the IAP device, which is in the group."""
-        subentry_ids: list = []
+    def test_entities_go_in_the_cluster_subentry_except_area_sensors(
+        self,
+        dev_reg,  # noqa: ARG002
+        ent_reg,  # noqa: ARG002
+    ):
+        """
+        Total clients too, as it is on the IAP device, which is in the group.
 
+        Area sensors are the exception: they have no device, and a client
+        entity in the group would pull tracker-linked devices in with it.
+        """
+        placed: list = []
+        coordinator = fake_coordinator()
+        # So the clients' (not yet registered) trackers count as enabled.
+        coordinator.config_entry.options = {"track_new_devices": True}
+
+        setup_platform(sensor_setup_entry, coordinator, subentry_ids=placed)
         setup_platform(
-            sensor_setup_entry, fake_coordinator(), subentry_ids=subentry_ids
-        )
-        setup_platform(
-            binary_sensor_setup_entry, fake_coordinator(), subentry_ids=subentry_ids
+            binary_sensor_setup_entry, fake_coordinator(), subentry_ids=placed
         )
 
-        assert subentry_ids == [SUBENTRY_ID, SUBENTRY_ID, SUBENTRY_ID]
+        assert dict(placed) == {
+            "ArubaTotalClientsSensor": SUBENTRY_ID,
+            "ArubaAPClientsSensor": SUBENTRY_ID,
+            "ArubaAPConnectivity": SUBENTRY_ID,
+            "ArubaClientAreaSensor": None,
+        }
 
-    def test_total_clients_without_the_ap_option(self, dev_reg):  # noqa: ARG002
+    def test_total_clients_without_the_ap_option(self, dev_reg, ent_reg):  # noqa: ARG002
         added = setup_platform(sensor_setup_entry, fake_coordinator(ap_devices=False))
 
         assert [type(e).__name__ for e in added] == ["ArubaTotalClientsSensor"]
@@ -923,6 +1027,6 @@ class TestPlatformSetup:
         known_forget = added[0]._forget
 
         known_forget("TESTSN0001")  # what removing the entity triggers
-        coordinator.listeners[0]()
+        poll_listeners(coordinator)
 
         assert [e._serial for e in added] == ["TESTSN0001", "TESTSN0001"]

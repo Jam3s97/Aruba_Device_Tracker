@@ -11,10 +11,14 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
+from homeassistant.const import EntityCategory
 from homeassistant.helpers import entity_registry as er
 
 from custom_components.aruba_device_tracker import switch as switch_platform
-from custom_components.aruba_device_tracker.number import ArubaPollIntervalNumber
+from custom_components.aruba_device_tracker.number import (
+    ArubaCleanupDaysNumber,
+    ArubaPollIntervalNumber,
+)
 from custom_components.aruba_device_tracker.switch import (
     ArubaCleanupSwitch,
     ArubaTrackNewSwitch,
@@ -146,3 +150,22 @@ class TestOptionsEntitiesRedraw:
             remove()
 
         assert entry.update_listeners == []
+
+
+@pytest.mark.parametrize(
+    "entity_class",
+    [
+        ArubaTrackNewSwitch,
+        ArubaCleanupSwitch,
+        ArubaPollIntervalNumber,
+        ArubaCleanupDaysNumber,
+    ],
+)
+def test_controls_are_configuration_entities(entity_class):
+    """
+    Listed under the device's Configuration section, not Controls.
+
+    That also keeps them out of auto-generated dashboards and of voice
+    commands such as "turn off all switches".
+    """
+    assert entity_class(FakeEntry()).entity_category is EntityCategory.CONFIG

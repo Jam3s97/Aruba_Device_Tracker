@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from homeassistant.const import CONF_HOST
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 
 from .const import DOMAIN, MANUFACTURER
@@ -35,6 +36,54 @@ def ap_unique_id(entry_id: str, serial: str, key: str) -> str:
     pointed at the same cluster both see every AP.
     """
     return f"{entry_id}_{serial}_{key}"
+
+
+def area_unique_id(entry_id: str, mac: str) -> str:
+    """
+    Return the entity-registry unique ID for a tracked client's Area sensor.
+
+    A prefix rather than a suffix (``_area``), so it can never be confused
+    with a network sensor whose profile happens to be named "area".
+    """
+    return f"{entry_id}_area_{mac}"
+
+
+def is_area_unique_id(entry_id: str, unique_id: str) -> bool:
+    """Return True if ``unique_id`` is one of this entry's Area sensors."""
+    return unique_id.startswith(area_unique_id(entry_id, ""))
+
+
+def network_unique_id(entry_id: str, profile: str) -> str:
+    """
+    Return the entity-registry unique ID for a network's client-count sensor.
+
+    Keyed by profile name, which stays the same if the broadcast SSID is
+    renamed on the controller.
+    """
+    return f"{entry_id}_network_{profile}"
+
+
+def find_ap_device(
+    dev_reg: dr.DeviceRegistry, entry_id: str, serial: str
+) -> DeviceEntry | None:
+    """
+    Return this entry's device for the AP with ``serial``, if it has one.
+
+    Looks through this entry's own devices rather than calling
+    ``async_get_device``: HA 2026.9 deprecates that (identifiers are only
+    unique within a config entry now) for ``async_get_device_by_identifier``,
+    which the 2026.3 floor doesn't have. An entry has a handful of devices,
+    so the scan is cheap.
+    """
+    identifier = (DOMAIN, serial)
+    return next(
+        (
+            device
+            for device in dr.async_entries_for_config_entry(dev_reg, entry_id)
+            if identifier in device.identifiers
+        ),
+        None,
+    )
 
 
 def is_ap_device(device: DeviceEntry, entry_id: str) -> bool:

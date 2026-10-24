@@ -154,7 +154,7 @@ class TestLayout:
             aps = get_aps(text=text)
 
         assert list(aps) == ["TESTSN0010"]
-        assert "did not match the AP table" in caplog.text
+        assert "did not match the access points table" in caplog.text
         assert "StairAP" in caplog.text
 
     def test_header_with_no_aps_is_an_empty_dict(self, get_aps):

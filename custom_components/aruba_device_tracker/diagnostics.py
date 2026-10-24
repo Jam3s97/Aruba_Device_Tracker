@@ -27,6 +27,8 @@ from .aruba_client import (
     _EMPTY_CELLS,
     _FOOTER_PREFIXES,
     _MAC_PATTERN,
+    _NETWORK_COLUMN_ALIASES,
+    _NETWORK_REQUIRED_COLUMNS,
     _find_columns,
     _is_rule,
 )
@@ -42,6 +44,7 @@ TO_REDACT = {CONF_HOST, CONF_USERNAME, CONF_PASSWORD}
 
 SHOW_APS = "show aps"
 SHOW_CLIENTS = "show clients"
+SHOW_NETWORK = "show network"
 
 # Identifying columns, keyed as _find_columns names them, mapped to a
 # placeholder family. A value seen in both tables gets the same placeholder in
@@ -65,6 +68,13 @@ _AP_FAMILIES = {
     "zone": "zone",
     "linklocalipaddress": "ipv6",
 }
+# A network's ESSID shares the "network" family with the clients' ESSID
+# column, so a client's SSID still matches its network.
+_NETWORK_FAMILIES = {
+    "profilename": "profile",
+    "essid": "network",
+    "zone": "zone",
+}
 
 
 def _documentation_ipv4(n: int) -> str:
@@ -86,6 +96,7 @@ _PLACEHOLDERS: dict[str, Callable[[int], str]] = {
     "mac": lambda n: f"00:00:5e:00:{0x53 + (n >> 8):02x}:{n & 0xFF:02x}",
     "serial": lambda n: f"SERIAL{n:04d}",
     "zone": lambda n: f"zone-{n}",
+    "profile": lambda n: f"profile-{n}",
 }
 
 _MAC_ANYWHERE = re.compile(_MAC_PATTERN, re.IGNORECASE)
@@ -207,6 +218,14 @@ async def async_get_config_entry_diagnostics(
         _AP_COLUMN_ALIASES,
         _AP_FAMILIES,
     )
+    # Then 'show network', so SSID placeholders follow the network list.
+    show_network = _raw_table(
+        scrubber,
+        outputs.get(SHOW_NETWORK),
+        _NETWORK_REQUIRED_COLUMNS,
+        _NETWORK_COLUMN_ALIASES,
+        _NETWORK_FAMILIES,
+    )
     show_clients = _raw_table(
         scrubber,
         outputs.get(SHOW_CLIENTS),
@@ -233,6 +252,7 @@ async def async_get_config_entry_diagnostics(
             "devices_remembered": len(coordinator.last_seen),
             "ap_devices_enabled": coordinator.ap_devices,
             "ap_list_ok": coordinator.aps_ok,
+            "network_list_ok": coordinator.networks_ok,
         },
         "access_points": [
             {
@@ -244,6 +264,16 @@ async def async_get_config_entry_diagnostics(
             }
             for serial, ap in coordinator.aps.items()
         ],
+        "networks": [
+            {
+                "essid": scrubber.placeholder("network", network["essid"]),
+                "enabled": network["enabled"],
+                "clients_reported": network["clients"],
+                "clients_counted": coordinator.network_client_counts.get(profile),
+            }
+            for profile, network in coordinator.networks.items()
+        ],
         "show_aps": show_aps,
+        "show_network": show_network,
         "show_clients": show_clients,
     }

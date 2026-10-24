@@ -19,6 +19,7 @@ CONF_CLEANUP_ENABLED = "cleanup_enabled"
 CONF_CLEANUP_DAYS = "cleanup_days"
 CONF_VERIFY_SSL = "verify_ssl"
 CONF_ENABLE_AP_DEVICES = "enable_ap_devices"
+CONF_ENABLE_AREA_SENSORS = "enable_area_sensors"
 
 DEFAULT_TRACK_NEW = False
 DEFAULT_SCAN_INTERVAL = 30  # seconds
@@ -38,6 +39,11 @@ DEFAULT_VERIFY_SSL = False
 # Costs one extra 'show aps' request per poll. On by default for the 2.2 beta;
 # revisit before the stable release.
 DEFAULT_ENABLE_AP_DEVICES = True
+
+# Area sensors: opt-in (off by default). When on, every enabled tracker gets
+# one, each created disabled for users to enable individually, since most
+# want them for a few phones only. Needs AP devices, which give the areas.
+DEFAULT_ENABLE_AREA_SENSORS = False
 
 # Client data attribute keys.
 #
@@ -70,6 +76,11 @@ STORAGE_SAVE_DELAY = 60  # seconds
 # failures in a row means the AP is genuinely down: the coordinator then raises
 # UpdateFailed and the trackers go unavailable until a poll succeeds.
 UNAVAILABLE_AFTER_FAILED_POLLS = 3
+
+# The configured networks rarely change, so 'show network' is fetched at
+# startup and then this often. Per-network counts are still recounted every
+# poll, from the client list.
+NETWORK_REFRESH_MINUTES = 30
 
 # Stale-device cleanup measures staleness in days, so hourly is ample.
 CLEANUP_INTERVAL_HOURS = 1

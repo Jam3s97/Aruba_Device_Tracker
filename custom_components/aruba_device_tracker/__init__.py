@@ -32,6 +32,7 @@ from .aruba_client import (
     ArubaConnectionError,
     ArubaError,
     ArubaIAPClient,
+    ArubaNetwork,
 )
 from .const import (
     CLEANUP_INTERVAL_HOURS,
@@ -40,20 +41,29 @@ from .const import (
     CONF_CLEANUP_DAYS,
     CONF_CLEANUP_ENABLED,
     CONF_ENABLE_AP_DEVICES,
+    CONF_ENABLE_AREA_SENSORS,
     CONF_SCAN_INTERVAL,
     CONF_VERIFY_SSL,
     DEFAULT_CLEANUP_DAYS,
     DEFAULT_CLEANUP_ENABLED,
     DEFAULT_ENABLE_AP_DEVICES,
+    DEFAULT_ENABLE_AREA_SENSORS,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_VERIFY_SSL,
     DOMAIN,
     LEGACY_STORAGE_KEY,
+    NETWORK_REFRESH_MINUTES,
     STORAGE_SAVE_DELAY,
     STORAGE_VERSION,
     UNAVAILABLE_AFTER_FAILED_POLLS,
 )
-from .utils import is_ap_device, tracker_unique_id
+from .utils import (
+    area_unique_id,
+    find_ap_device,
+    is_ap_device,
+    is_area_unique_id,
+    tracker_unique_id,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -125,6 +135,10 @@ async def async_setup_entry(
 
     scan_interval = int(_option(entry, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
     ap_devices = bool(_option(entry, CONF_ENABLE_AP_DEVICES, DEFAULT_ENABLE_AP_DEVICES))
+    # Area sensors need AP devices: an AP's device is what holds its area.
+    area_sensors = ap_devices and bool(
+        _option(entry, CONF_ENABLE_AREA_SENSORS, DEFAULT_ENABLE_AREA_SENSORS)
+    )
 
     coordinator = ArubaIAPCoordinator(
         hass=hass,
@@ -132,6 +146,7 @@ async def async_setup_entry(
         entry=entry,
         scan_interval=scan_interval,
         ap_devices=ap_devices,
+        area_sensors=area_sensors,
     )
 
     # Load persisted last-seen data before the first refresh so cleanup
@@ -157,11 +172,13 @@ async def async_setup_entry(
     _async_remove_devices_outside_subentry(hass, entry, coordinator.ap_subentry_id)
     entry.async_on_unload(entry.add_update_listener(_async_cluster_subentry_listener))
 
+    # Run on every setup with an option off, not only when it is turned off:
+    # that keeps it idempotent and also tidies up after a downgrade or a
+    # reload that failed halfway.
     if not ap_devices:
-        # Run on every setup with the option off, not only when it is turned
-        # off: that keeps it idempotent and also tidies up after a downgrade
-        # or a reload that failed halfway.
         _async_remove_ap_devices(hass, entry)
+    elif not area_sensors:
+        _async_remove_area_sensors(hass, entry)
 
     await hass.config_entries.async_forward_entry_setups(entry, coordinator.platforms)
 
@@ -275,10 +292,13 @@ def _async_remove_ap_devices(hass: HomeAssistant, entry: ArubaConfigEntry) -> No
     Remove this entry's AP devices and AP entities.
 
     Removing a device removes its entities, which covers the per-AP Clients
-    sensors. The sensor platform is shared with Total clients, so it isn't
-    cleared by domain. Tracker entities, the IAP control device and its
-    entities (Total clients included) are never touched.
+    sensors. The sensor platform is shared with Total clients and the network
+    sensors, so it isn't cleared by domain; Area sensors, which need AP
+    devices but have no device of their own, are removed by unique ID.
+    Tracker entities, the IAP control device and its entities (Total clients,
+    the network sensors) are never touched.
     """
+    _async_remove_area_sensors(hass, entry)
     ap_domains = {str(platform) for platform in AP_PLATFORMS}
     ent_reg = er.async_get(hass)
     for reg_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
@@ -289,6 +309,19 @@ def _async_remove_ap_devices(hass: HomeAssistant, entry: ArubaConfigEntry) -> No
     for device in dr.async_entries_for_config_entry(dev_reg, entry.entry_id):
         if is_ap_device(device, entry.entry_id):
             _async_remove_device(dev_reg, device, entry)
+
+
+@callback
+def _async_remove_area_sensors(hass: HomeAssistant, entry: ArubaConfigEntry) -> None:
+    """
+    Remove every Area sensor of this entry.
+
+    By unique ID: they have no device, so no device removal takes them.
+    """
+    ent_reg = er.async_get(hass)
+    for reg_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+        if is_area_unique_id(entry.entry_id, reg_entry.unique_id):
+            ent_reg.async_remove(reg_entry.entity_id)
 
 
 @callback
@@ -381,7 +414,7 @@ async def async_unload_entry(
 class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
     """Coordinator that polls the Aruba IAP for connected client data."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - independent settings, fixed at setup
         self,
         hass: HomeAssistant,
         client: ArubaIAPClient,
@@ -389,6 +422,7 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
         scan_interval: int = DEFAULT_SCAN_INTERVAL,
         *,
         ap_devices: bool = False,
+        area_sensors: bool = False,
     ) -> None:
         """Initialise the coordinator with a client and polling interval."""
         super().__init__(
@@ -412,6 +446,8 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
         # AP devices: fixed for the life of this setup, because it decides
         # which platforms were forwarded. Toggling it reloads the entry.
         self.ap_devices = ap_devices
+        # Fixed for this setup like ap_devices; toggling it reloads the entry.
+        self.area_sensors = area_sensors
         self.platforms = BASE_PLATFORMS + (AP_PLATFORMS if ap_devices else [])
         # The subentry AP entities and devices belong to; set by setup.
         self.ap_subentry_id: str | None = None
@@ -422,7 +458,20 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
         # serial -> connected clients, counted from the client list so the
         # sensors always agree with the trackers.
         self.ap_client_counts: dict[str, int] = {}
+        # AP name -> serial, from the last 'show aps'. 'show clients' names a
+        # client's AP but not its serial, so this is how the Clients and Area
+        # sensors find a client's AP.
+        self.ap_serial_by_name: dict[str, str] = {}
         self._duplicate_ap_names: set[str] = set()
+        # profile -> network, from 'show network', fetched every
+        # NETWORK_REFRESH_MINUTES. Kept on a failed fetch; networks_ok says
+        # whether the last attempt worked.
+        self.networks: dict[str, ArubaNetwork] = {}
+        self.networks_ok = False
+        # profile -> connected clients, recounted every poll.
+        self.network_client_counts: dict[str, int] = {}
+        self._last_network_refresh: datetime | None = None
+        self._duplicate_essids: set[str] = set()
 
     # ------------------------------------------------------------------
     # Persistent last-seen storage
@@ -564,6 +613,7 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
 
         if self.ap_devices:
             await self._async_update_aps(result)
+        await self._async_update_networks(result)
 
         # Run stale-device cleanup if enabled and due.
         await self._async_cleanup_stale_devices()
@@ -584,23 +634,109 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
         the AP entities unavailable. The one exception is a rejected login,
         which would fail the next 'show clients' too, so it starts reauth.
         """
-        try:
-            aps = await self.hass.async_add_executor_job(self.client.get_aps)
-        except ArubaAuthError as err:
-            raise ConfigEntryAuthFailed(str(err)) from err
-        except ArubaError as err:
-            # str(err) is built by the client and carries no session token.
-            LOGGER.debug("Aruba IAP access point list unavailable: %s", err)
-            aps = None
-        except Exception:
-            LOGGER.exception("Unexpected error reading the Aruba IAP access points")
-            aps = None
-
+        aps = await self._async_fetch_table(self.client.get_aps, "access points")
         self.aps_ok = aps is not None
         if aps is not None:
             self._async_rename_ap_devices(aps)
             self.aps = aps
         self.ap_client_counts = self._count_clients_per_ap(clients)
+
+    async def _async_fetch_table[T](
+        self, fetch: Callable[[], dict[str, T] | None], what: str
+    ) -> dict[str, T] | None:
+        """
+        Run one of the client's table fetches, mapping failures to None.
+
+        Shared by 'show aps' and 'show network'. Any failure returns None, so
+        it only affects that table's entities. A rejected login is the
+        exception: it raises ConfigEntryAuthFailed, because the next
+        'show clients' would be rejected too.
+        """
+        try:
+            return await self.hass.async_add_executor_job(fetch)
+        except ArubaAuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
+        except ArubaError as err:
+            # str(err) is built by the client and carries no session token.
+            LOGGER.debug("Aruba IAP %s unavailable: %s", what, err)
+        except Exception:
+            LOGGER.exception("Unexpected error reading the Aruba IAP %s", what)
+        return None
+
+    async def _async_update_networks(self, clients: dict[str, ArubaClientData]) -> None:
+        """
+        Refresh the network list when due, and recount clients per network.
+
+        The list of configured networks rarely changes, so 'show network' is
+        fetched at most every NETWORK_REFRESH_MINUTES (after 'show clients'
+        and 'show aps', never in parallel). A failed fetch is retried on the
+        next poll rather than after the full interval, so a blip doesn't
+        leave the sensors unavailable for half an hour. The counts come from
+        the client list on every poll, so they agree with the trackers.
+        """
+        now = datetime.now(tz=UTC)
+        due = (
+            self._last_network_refresh is None
+            or now - self._last_network_refresh
+            >= (timedelta(minutes=NETWORK_REFRESH_MINUTES))
+        )
+        refreshed = False
+        if due:
+            networks = await self._async_fetch_table(
+                self.client.get_networks, "networks"
+            )
+            self.networks_ok = networks is not None
+            if networks is not None:
+                self.networks = networks
+                self._last_network_refresh = now
+                refreshed = True
+        self.network_client_counts = self._count_clients_per_network(
+            clients, compare=refreshed
+        )
+
+    def _count_clients_per_network(
+        self, clients: dict[str, ArubaClientData], *, compare: bool
+    ) -> dict[str, int]:
+        """
+        Count connected clients per network profile.
+
+        Clients report the broadcast SSID (ESSID), which can differ from the
+        profile name, so they are matched through each network's ESSID. With
+        ``compare`` (just after a fetch, while the controller's own counts are
+        current) the two are compared at debug level.
+        """
+        if not self.networks:
+            return {}
+        profile_by_essid: dict[str, str] = {}
+        for profile, network in self.networks.items():
+            essid = network["essid"]
+            if essid in profile_by_essid and essid not in self._duplicate_essids:
+                self._duplicate_essids.add(essid)
+                LOGGER.warning(
+                    "Two Aruba networks both broadcast the SSID '%s', so their "
+                    "client counts can't be told apart",
+                    essid,
+                )
+            profile_by_essid[essid] = profile
+
+        counts = dict.fromkeys(self.networks, 0)
+        for client in clients.values():
+            profile = profile_by_essid.get(client["essid"] or "")
+            if profile is not None:
+                counts[profile] += 1
+
+        if compare:
+            for profile, network in self.networks.items():
+                reported = network["clients"]
+                if reported is not None and reported != counts[profile]:
+                    LOGGER.debug(
+                        "Aruba IAP network %s reports %d client(s); the client "
+                        "list has %d",
+                        network["essid"],
+                        reported,
+                        counts[profile],
+                    )
+        return counts
 
     @callback
     def _async_rename_ap_devices(self, aps: dict[str, ArubaAP]) -> None:
@@ -616,7 +752,7 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
             previous = self.aps.get(serial)
             if previous is None or previous["name"] == ap["name"]:
                 continue
-            device = dev_reg.async_get_device(identifiers={(DOMAIN, serial)})
+            device = find_ap_device(dev_reg, self.config_entry.entry_id, serial)
             if device is not None:
                 dev_reg.async_update_device(device.id, name=ap["name"])
 
@@ -641,6 +777,7 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
                     name,
                 )
             serial_by_name[name] = serial
+        self.ap_serial_by_name = serial_by_name
 
         counts = dict.fromkeys(self.aps, 0)
         for client in clients.values():
@@ -730,6 +867,13 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
                     entity_id,
                     last_seen_iso,
                 )
+
+            # The client's Area sensor goes with its tracker.
+            area_entity_id = registry.async_get_entity_id(
+                "sensor", DOMAIN, area_unique_id(self.config_entry.entry_id, mac)
+            )
+            if area_entity_id is not None:
+                registry.async_remove(area_entity_id)
 
             del self.last_seen[mac]
             removed.add(mac)

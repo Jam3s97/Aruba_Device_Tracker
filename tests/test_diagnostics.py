@@ -14,6 +14,7 @@ from custom_components.aruba_device_tracker.aruba_client import (
     _find_columns,
     _parse_aps,
     _parse_clients,
+    _parse_networks,
     _slice_row,
 )
 from tests.conftest import show_cmd_url
@@ -51,6 +52,12 @@ def unchanged_identifying_cells(original: str, scrubbed: str, kind: str):
             diagnostics._AP_COLUMN_ALIASES,
         )
         families = diagnostics._AP_FAMILIES
+    elif kind == "networks":
+        required, aliases = (
+            diagnostics._NETWORK_REQUIRED_COLUMNS,
+            diagnostics._NETWORK_COLUMN_ALIASES,
+        )
+        families = diagnostics._NETWORK_FAMILIES
     else:
         required, aliases = (
             diagnostics._CLIENT_REQUIRED_COLUMNS,
@@ -211,10 +218,14 @@ class TestDownload:
     @pytest.fixture
     def download(self, raw_output):
         def _download(*, with_aps: bool = True):
-            outputs = {"show clients": raw_output("show_clients_real.txt")}
+            outputs = {
+                "show clients": raw_output("show_clients_real.txt"),
+                "show network": raw_output("show_network_real.txt"),
+            }
             if with_aps:
                 outputs["show aps"] = raw_output("show_aps_real.txt")
             aps, _ = _parse_aps(raw_output("show_aps_real.txt"))
+            networks, _ = _parse_networks(raw_output("show_network_real.txt"))
             coordinator = SimpleNamespace(
                 client=SimpleNamespace(last_outputs=outputs),
                 last_update_success=True,
@@ -225,6 +236,9 @@ class TestDownload:
                 aps_ok=with_aps,
                 aps=aps if with_aps else {},
                 ap_client_counts=dict.fromkeys(aps, 1) if with_aps else {},
+                networks_ok=True,
+                networks=networks,
+                network_client_counts=dict.fromkeys(networks, 2),
             )
             entry = SimpleNamespace(
                 runtime_data=coordinator,
@@ -272,6 +286,38 @@ class TestDownload:
             == []
         )
 
+    def test_the_network_table_is_scrubbed(self, download, raw_output):
+        networks = "\n".join(download()["show_network"]["lines"])
+
+        assert (
+            unchanged_identifying_cells(
+                raw_output("show_network_real.txt"), networks, "networks"
+            )
+            == []
+        )
+        parsed, skipped = _parse_networks(networks)
+        assert skipped == []
+        assert len(parsed) == 7
+        # Disabled stays visible: it explains an unavailable sensor.
+        assert [n["enabled"] for n in parsed.values()].count(False) == 1
+
+    def test_clients_ssids_match_the_network_table(self, download):
+        """The same placeholder in both tables, so clients still map to networks."""
+        result = download()
+
+        networks, _ = _parse_networks("\n".join(result["show_network"]["lines"]))
+        clients, _ = _parse_clients("\n".join(result["show_clients"]["lines"]))
+        network_ssids = {n["essid"] for n in networks.values()}
+        assert {c["essid"] for c in clients.values()} <= network_ssids
+
+    def test_networks_summary_uses_the_placeholders(self, download):
+        result = download()
+
+        summary = result["networks"]
+        assert len(summary) == 7
+        assert all(n["essid"].startswith("net-") for n in summary)
+        assert {n["clients_counted"] for n in summary} == {2}
+
     def test_access_points_use_the_tables_placeholders(self, download):
         result = download()
 
@@ -291,6 +337,7 @@ class TestDownload:
             "devices_remembered": 3,
             "ap_devices_enabled": True,
             "ap_list_ok": True,
+            "network_list_ok": True,
         }
 
     def test_option_off_has_no_ap_table(self, download):

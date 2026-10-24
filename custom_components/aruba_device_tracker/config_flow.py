@@ -26,12 +26,14 @@ from .const import (
     CONF_CLEANUP_DAYS,
     CONF_CLEANUP_ENABLED,
     CONF_ENABLE_AP_DEVICES,
+    CONF_ENABLE_AREA_SENSORS,
     CONF_SCAN_INTERVAL,
     CONF_TRACK_NEW,
     CONF_VERIFY_SSL,
     DEFAULT_CLEANUP_DAYS,
     DEFAULT_CLEANUP_ENABLED,
     DEFAULT_ENABLE_AP_DEVICES,
+    DEFAULT_ENABLE_AREA_SENSORS,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_TRACK_NEW,
     DEFAULT_VERIFY_SSL,
@@ -46,6 +48,13 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 LOGGER = logging.getLogger(__name__)
+
+# Options that reload the entry when changed, with their defaults. Every other
+# option is applied live (see the note in async_setup_entry).
+RELOAD_OPTIONS = {
+    CONF_ENABLE_AP_DEVICES: DEFAULT_ENABLE_AP_DEVICES,
+    CONF_ENABLE_AREA_SENSORS: DEFAULT_ENABLE_AREA_SENSORS,
+}
 
 # Credential fields use an explicit password selector so the frontend masks
 # them regardless of field naming.
@@ -172,6 +181,8 @@ class ArubaIAPConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
                 CONF_CLEANUP_ENABLED: user_input[CONF_CLEANUP_ENABLED],
                 CONF_CLEANUP_DAYS: user_input[CONF_CLEANUP_DAYS],
+                CONF_ENABLE_AP_DEVICES: user_input[CONF_ENABLE_AP_DEVICES],
+                CONF_ENABLE_AREA_SENSORS: user_input[CONF_ENABLE_AREA_SENSORS],
             }
             return self.async_create_entry(
                 title=f"Aruba IAP ({self._connection_data[CONF_HOST]})",
@@ -196,6 +207,12 @@ class ArubaIAPConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ): vol.All(
                         int, vol.Range(min=MIN_CLEANUP_DAYS, max=MAX_CLEANUP_DAYS)
                     ),
+                    vol.Optional(
+                        CONF_ENABLE_AP_DEVICES, default=DEFAULT_ENABLE_AP_DEVICES
+                    ): bool,
+                    vol.Optional(
+                        CONF_ENABLE_AREA_SENSORS, default=DEFAULT_ENABLE_AREA_SENSORS
+                    ): bool,
                 }
             ),
         )
@@ -364,14 +381,15 @@ class ArubaIAPOptionsFlow(config_entries.OptionsFlow):
             # Merge rather than replace: options can hold keys this form does
             # not show, such as a verify_ssl written by older versions.
             options = {**entry.options, **user_input}
-            ap_devices_changed = user_input[CONF_ENABLE_AP_DEVICES] != _current(
-                CONF_ENABLE_AP_DEVICES, DEFAULT_ENABLE_AP_DEVICES
+            reload_needed = any(
+                user_input[key] != _current(key, default)
+                for key, default in RELOAD_OPTIONS.items()
             )
-            if ap_devices_changed:
-                # The only option that needs a reload: it decides which
-                # platforms are forwarded. Saved here, before scheduling,
-                # because HA starts the reload task eagerly and it would
-                # otherwise set up again with the old value. Not an
+            if reload_needed:
+                # The only options that need a reload: they decide which
+                # platforms and entities are set up. Saved here, before
+                # scheduling, because HA starts the reload task eagerly and it
+                # would otherwise set up again with the old value. Not an
                 # update_listener: see the note in async_setup_entry.
                 self.hass.config_entries.async_update_entry(entry, options=options)
                 self.hass.config_entries.async_schedule_reload(entry.entry_id)
@@ -405,6 +423,12 @@ class ArubaIAPOptionsFlow(config_entries.OptionsFlow):
                         CONF_ENABLE_AP_DEVICES,
                         default=_current(
                             CONF_ENABLE_AP_DEVICES, DEFAULT_ENABLE_AP_DEVICES
+                        ),
+                    ): bool,
+                    vol.Optional(
+                        CONF_ENABLE_AREA_SENSORS,
+                        default=_current(
+                            CONF_ENABLE_AREA_SENSORS, DEFAULT_ENABLE_AREA_SENSORS
                         ),
                     ): bool,
                 }

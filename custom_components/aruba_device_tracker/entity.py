@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from homeassistant.const import EntityCategory
 from homeassistant.core import callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity import Entity
@@ -34,6 +35,10 @@ class ArubaOptionsEntity(Entity):
     """
 
     _entry: ArubaConfigEntry
+    # Settings, so HA lists them under the device's Configuration section and
+    # leaves them out of auto-generated dashboards and of voice commands such
+    # as "turn off all switches".
+    _attr_entity_category = EntityCategory.CONFIG
 
     async def async_added_to_hass(self) -> None:
         """Redraw whenever the entry's options change."""
