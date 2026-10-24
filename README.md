@@ -38,6 +38,10 @@ No more adding a custom repository: just search for **Aruba Device Tracker** in 
 - **Auto-remove stale devices** - automatically remove entities for devices not seen for a configurable number of days
 - **Friendly name renaming** - rename any device via the HA entity registry
 - **Offline devices stay away** - devices that are away when HA restarts correctly restore their away state; no unavailable flash or "entity no longer provided" warnings
+- **Access points as devices (beta)** - each AP in your cluster appears as a device with a **Connectivity** sensor (is the AP online?) and a **Clients** sensor (how many devices are connected to it), plus a **Total clients** sensor for the whole cluster. See [Access Points](#access-points-beta)
+- **Clients per network** - a sensor for each Wi-Fi network (SSID) on your controller, counting the devices connected to it. See [Clients per Network](#clients-per-network)
+- **Area sensors (beta)** - an optional sensor per device showing the area of the access point it's connected to. See [Area Sensors](#area-sensors-beta)
+- **Diagnostics download** - one click gives you a file to attach to bug reports, with device names, MAC addresses, IP addresses, SSIDs and serial numbers removed. See [Reporting a Problem or a New AP Model](#reporting-a-problem-or-a-new-ap-model)
 - **AP outages show as unavailable** - a single failed poll is ignored and the last known state is kept. If the IAP fails to answer 3 polls in a row, trackers become `unavailable` (rather than showing stale home/away) until it responds again. The outage and the recovery are each logged once. A device that has simply left is always `not_home`, never `unavailable`
 
 ## Requirements
@@ -85,14 +89,18 @@ Aruba Device Tracker is in the HACS default store, so there's no custom reposito
    - **Poll interval** - how often the IAP is queried in seconds (default 30s)
    - **Auto-Remove Stale Devices** - automatically remove entities for devices not seen for a set number of days (default: on)
    - **Auto-Remove Stale Devices After** - number of days of inactivity before an entity is removed (default: 30 days)
+   - **Access points as devices** - show each access point as a device with its own sensors (default: on). See [Access Points](#access-points-beta)
+   - **Area sensors** - give each tracked device a sensor showing its access point's area (default: off). See [Area Sensors](#area-sensors-beta)
 
 ## Options
 
 Tracking and polling settings (track new devices, poll interval, stale device cleanup) are editable after setup via **Configure** on the integration card. They take effect immediately, without a reload.
 
-The poll interval, track new devices toggle, and stale device cleanup settings are also available as entities on the IAP device card for quick changes without opening **Configure**.
+The poll interval, track new devices toggle, and stale device cleanup settings are also available as entities in the **Configuration** section of the IAP device page, for quick changes without opening **Configure**. Being configuration entities, they're left out of auto-generated dashboards and of voice commands such as "turn off all switches".
 
 Turning **Track new devices** on from the switch or **Configure** also enables trackers that were created disabled while it was off. Trackers you disabled yourself stay disabled.
+
+**Access points as devices** and **Area sensors** are also under **Configure**. They are the only settings that reload the integration when you change them, because they add or remove a set of devices and entities. Your trackers are not affected.
 
 ## Changing the IP Address or Credentials
 
@@ -105,6 +113,91 @@ The password field is not pre-filled - leave it blank to keep the stored passwor
 One config entry covers a whole Instant cluster: add the Virtual Controller's IP once, and devices roaming between APs in that cluster stay a single tracker.
 
 If you also run a separate cluster or a standalone AP, add it as its own entry. A device seen by both gets one tracker per entry (for example `device_tracker.phone` and `device_tracker.phone_2`). Rename them to tell them apart, e.g. "Phone (Workshop)". To get a single home/away answer, add both trackers to the same [person](https://www.home-assistant.io/integrations/person/): a person is home if any of their network trackers is home.
+
+## Randomised (Private) MAC Addresses
+
+Many phones and tablets use a **private MAC address that's randomised per SSID**: the device gives each Wi-Fi network a different MAC address. The integration tells devices apart by MAC address, so a phone that connects to more than one of your SSIDs (for example a main network and a separate 2.4 GHz one) shows up as **two devices with two trackers**. The second gets a `_2` on the end, for example `device_tracker.jos_phone` and `device_tracker.jos_phone_2`.
+
+To have one tracker per device when connecting to multiple SSIDs, turn off the private address for your home networks on the device itself:
+
+- **Android:** **Settings → Wi-Fi**, tap the network, then **Privacy** (or **MAC address type**) → **Use device MAC**
+- **iPhone / iPad:** **Settings → Wi-Fi**, tap **ⓘ** next to the network, then set **Private Wi-Fi Address** to **Off**
+
+Do this for each of your SSIDs the device uses, then delete the tracker you no longer need.
+
+If you'd rather keep private addresses on, add both trackers to the same [person](https://www.home-assistant.io/integrations/person/): a person is home if any of their trackers is home.
+
+> [!NOTE]
+> Some devices can also change their private address over time, not just per SSID. Each new address is a new tracker. **Auto-remove stale devices** clears out the old ones once they haven't been seen for the set number of days.
+
+## Access Points (beta)
+
+> [!NOTE]
+> New in 2.2.0 and still in beta. It is **on by default**, including for existing installs when they upgrade. Turn it off under **Configure → Access points as devices** if you don't want it.
+
+Each access point in your cluster becomes a device in Home Assistant, named as it is on the controller (for example *LoungeAP*), with its model and serial number. On the integration's page they're listed together with the IAP device under a **Controller and access points** group, apart from any devices Home Assistant has linked to your trackers (such as a camera or vacuum another integration already knows about). Each AP device has:
+
+- **Connectivity** - **Connected** while the AP is part of the cluster, **Disconnected** when it drops out of the cluster (for example, powered off or rebooting)
+- **Clients** - how many devices are connected to that AP right now
+
+The IAP device also gets a **Total clients** sensor for the whole cluster. It counts the devices the trackers already see, so it stays even with access points as devices turned off.
+
+**How quickly it updates.** In testing on a AP cluster, an AP that lost power dropped out of the cluster within 1–1½ minutes, so **Connectivity** shows **Disconnected** within about 2 minutes, counting the time until the next poll. A rebooting AP rejoins about 3 minutes after power returns, and shows **Connected** as soon as it does.
+
+**While an AP is offline**, its **Clients** sensor is unavailable rather than showing 0, and the devices that were connected to it roam to other APs as usual. If Home Assistant restarts while an AP is offline, the AP still shows **Disconnected** rather than disappearing.
+
+**Use the Virtual Controller IP.** The access point list is read from the cluster's conductor (the AP currently running the Virtual Controller). Configure the integration with the **Virtual Controller IP** rather than a single AP's address, so it keeps working if a different AP takes over as conductor. To change it, use **Reconfigure** (see above).
+
+**What it costs.** One extra request to the AP per poll. The sensors only write to the recorder database when a value actually changes: an AP going offline or coming back, or a device joining or leaving.
+
+**Removing an AP for good.** An AP that goes offline keeps its device, so a reboot doesn't lose its name, area or customisations. To remove an AP you have retired, open its device page and choose **Delete**. Home Assistant only allows this once the AP is no longer in the cluster, because an AP that is still reporting would come straight back.
+
+**Turning it off** removes the AP devices and their sensors. Device trackers, the IAP device's switches and settings, and **Total clients** are not touched. Deleting the **Controller and access points** group from its **⋮** menu does the same thing: the integration turns the option off and reloads, and the IAP device comes back in the group on its own.
+
+> [!NOTE]
+> Clients are matched to APs by AP name. If two APs share a name their counts can't be told apart, and a warning is logged: give each AP a unique name on the controller.
+
+## Clients per Network
+
+The IAP device gets a **Clients on …** sensor for each Wi-Fi network configured on your controller, for example *Clients on Home* or *Clients on Guest*. It counts the devices connected to that network across the whole cluster.
+
+- Every network configured on the controller gets a sensor, including ones nobody is connected to right now (they read 0).
+- A network that's **disabled** on the controller shows as unavailable.
+- A network you **delete** on the controller has its sensor removed. Renaming a network's SSID renames its sensor.
+- The list of networks is read when Home Assistant starts and then every 30 minutes, so a newly added network appears within half an hour. The counts update on every poll.
+
+This works whether or not **Access points as devices** is turned on.
+
+## Area Sensors (beta)
+
+Every **enabled** device tracker also gets an **Area** sensor, for example *Jo's phone area*. It shows the area of the access point the device is connected to. These sensors are **turned off by default**: enable the ones you want, usually just phones and tablets, from the device's entity settings (**Settings → Entities**, search for "area", open one and turn on **Enabled**).
+
+A tracker that's disabled has no Area sensor. When you enable a tracker, its Area sensor appears shortly after, once Home Assistant has reloaded the integration. If you disable a tracker, its Area sensor is removed.
+
+Area sensors are **off by default**. Turning on **Configure → Area sensors** creates them, each one disabled, so you then enable just the ones you want. Turning the option off again removes them all.
+
+> [!IMPORTANT]
+> The area is the area of the **access point** the device is connected to. That is usually the nearest one, but it doesn't mean the device is in that room: devices often stay connected to a farther access point, and one access point can cover several rooms. Treat it as "near", not "in".
+
+To set it up:
+
+1. Turn on **Access points as devices** (it's on by default) and **Area sensors** (off by default), both under **Configure**.
+2. Give each access point an area: open the AP's device page and set its **Area**. If any are missing once you've enabled an Area sensor, a notice under **Settings → Repairs** lists them.
+3. Enable the Area sensors you want.
+
+The sensor shows **unknown** while the device is away, and when its access point has no area. When a device moves to an access point in another area, the sensor updates on the next poll. It also follows you renaming an area, or moving an access point to a different area.
+
+Each Area sensor is named after its device when the sensor is first created. If you rename the device tracker later, rename the Area sensor too. Every Area sensor has a `mac` attribute, the same as its tracker's, so you can always tell which tracker it belongs to, even when two share a name (see [Randomised MAC Addresses](#randomised-private-mac-addresses)). It also has an `area_id` attribute while the area is known.
+
+## Reporting a Problem or a New AP Model
+
+The integration has only been tested on a few AP models and firmware versions, so reports from other hardware are very welcome, whether everything works or not.
+
+1. Go to **Settings → Devices & services → Aruba Device Tracker**
+2. Open the **⋮** menu on your entry and choose **Download diagnostics**
+3. Open a [new issue](https://github.com/Jam3s97/Aruba_Device_Tracker/issues/new/choose): choose **Report an AP model or firmware**, or **Bug report** if something is broken, and attach the file
+
+The diagnostics file contains the raw client, access point and network tables from your AP, with device names, MAC addresses, IP addresses, IPv6 addresses, SSIDs, AP names and serial numbers replaced by placeholders. Your host, username and password are removed. It's worth a quick look before you attach it.
 
 ## Renaming Devices
 
@@ -132,6 +225,8 @@ This integration is designed so that a device sitting still costs **nothing**:
 - **`last_seen` and `days_until_cleanup` are only published while a device is away.** For a connected device "last seen" is always ~now, so it changed every poll while telling you nothing the `home` state didn't already.
 
 What remains - `access_point`, `essid`, `ip_address`, `os`, `channel` - only changes when something actually changes: the device roams to another AP, gets a new IP, or switches band. So a device that stays connected to the same AP writes one row when it arrives and one when it leaves.
+
+The [access point](#access-points-beta) and [network](#clients-per-network) sensors follow the same rule. They have no attributes, and only write a row when a count or an AP's connectivity actually changes. An [Area sensor](#area-sensors-beta) writes a row each time its device moves to an access point in a different area, so a device that keeps switching between two access points in different areas writes more.
 
 ## Default Away Timer Behaviour
 

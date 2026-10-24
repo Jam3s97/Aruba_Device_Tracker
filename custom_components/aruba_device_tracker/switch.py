@@ -19,7 +19,9 @@ from .utils import get_device_info
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
-    from homeassistant.helpers.entity_platform import AddEntitiesCallback
+    from homeassistant.helpers.entity_platform import (
+        AddConfigEntryEntitiesCallback,
+    )
 
     from . import ArubaConfigEntry
 
@@ -29,14 +31,17 @@ LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant,  # noqa: ARG001
     entry: ArubaConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up switch entities for the IAP control device."""
     async_add_entities(
         [
             ArubaTrackNewSwitch(entry),
             ArubaCleanupSwitch(entry),
-        ]
+        ],
+        # Grouped with the APs, on the integration page, under the cluster
+        # subentry (see _async_ensure_cluster_subentry).
+        config_subentry_id=entry.runtime_data.ap_subentry_id,
     )
 
 

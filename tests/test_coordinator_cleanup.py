@@ -69,13 +69,16 @@ class FakeRegistry:
         self._unique_ids.discard(entity_id.removeprefix("device_tracker."))
 
 
-def make_coordinator(
+def make_coordinator(  # noqa: PLR0913
     last_seen=None,
     registry=None,
     *,
     cleanup_enabled=True,
     cleanup_days=30,
     get_clients=None,
+    get_aps=None,
+    ap_devices=False,
+    get_networks=None,
 ):
     """Build a real coordinator with fakes, bypassing __init__ and hass."""
     coordinator = object.__new__(ArubaIAPCoordinator)
@@ -90,7 +93,21 @@ def make_coordinator(
     coordinator._failed_polls = 0
     coordinator._removal_listeners = []
     coordinator.data = None
-    coordinator.client = SimpleNamespace(get_clients=get_clients)
+    coordinator.client = SimpleNamespace(
+        get_clients=get_clients,
+        get_aps=get_aps,
+        get_networks=get_networks or dict,
+    )
+    coordinator.ap_devices = ap_devices
+    coordinator.aps = {}
+    coordinator.aps_ok = False
+    coordinator.ap_client_counts = {}
+    coordinator._duplicate_ap_names = set()
+    coordinator.networks = {}
+    coordinator.networks_ok = False
+    coordinator.network_client_counts = {}
+    coordinator._last_network_refresh = None
+    coordinator._duplicate_essids = set()
 
     async def _executor(func, *args):
         return func(*args)
