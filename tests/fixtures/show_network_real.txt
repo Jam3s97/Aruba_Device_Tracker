@@ -1,0 +1,15 @@
+cli output: 
+
+COMMAND=show network
+
+Networks
+--------
+Profile Name  ESSID       Clients  Type      Band         Authentication Method  Key Management  IP Assignment  Status    Zone  Coding   Active  Max IPv4 Users  MBSSID Group Profile
+------------  -----       -------  ----      ----         ---------------------  --------------  -------------  ------    ----  ------   ------  --------------  --------------------
+Visitors      VisitorNet  0        guest     2.4ghz       None                   WPA2-AES        VLAN 110       Enabled   -     Default  Yes     N/A             N/A
+Home          Home        18       employee  2.4ghz,5ghz  None                   WPA2-AES        VLAN 100       Enabled   -     Default  Yes     N/A             N/A
+Home2.4       Home2.4     6        employee  2.4ghz       None                   WPA2-AES        VLAN 100       Enabled   -     Default  Yes     N/A             N/A
+Office        Office      0        employee  all          None                   WPA3-SAE        VLAN 120       Enabled   -     Default  Yes     N/A             default
+Guest         Guest       2        employee  all          None                   WPA3-SAE        VLAN 110       Enabled   -     Default  Yes     N/A             default
+IoT           IoT         8        employee  2.4ghz       None                   WPA2-AES        VLAN 400       Enabled   -     Default  Yes     N/A             N/A
+spare         Spare       0        employee  2.4ghz       None                   WPA2-AES        VLAN 400       Disabled  -     Default  No      N/A             N/A

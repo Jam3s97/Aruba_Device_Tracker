@@ -1,0 +1,45 @@
+---
+name: "Report an AP model or firmware"
+description: "Tell us how the integration works with your Aruba Instant APs, especially a model or firmware version we haven't seen"
+labels: ["ap-report"]
+body:
+- type: markdown
+  attributes:
+    value: |
+      Thanks for helping! The integration has only been tested on a few AP models, so reports from other hardware and firmware are how it gets checked.
+
+      The most useful thing you can attach is the **diagnostics download**: in Home Assistant go to **Settings → Devices & services → Aruba Device Tracker**, open the **⋮** menu on your entry and choose **Download diagnostics**. It contains the raw `show aps` and `show clients` tables from your AP, with device names, MAC addresses, IP addresses, SSIDs and serial numbers replaced by placeholders. Please look through it before attaching it.
+- type: input
+  attributes:
+    label: "AP models"
+    description: "For example: AP-505, AP-365, IAP-305"
+  validations:
+    required: true
+- type: input
+  attributes:
+    label: "Instant AOS firmware version"
+    description: "Shown under Maintenance → Firmware in the Instant web UI, or by `show version` on the CLI"
+  validations:
+    required: true
+- type: input
+  attributes:
+    label: "Number of APs in the cluster"
+- type: dropdown
+  attributes:
+    label: "Did everything work?"
+    options:
+      - "Yes, everything looks right"
+      - "Mostly, but something looks wrong (describe below)"
+      - "No, something is broken (describe below)"
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: "What looks wrong?"
+    description: "For example: an AP missing, a wrong client count, wrong attributes on a tracker."
+- type: textarea
+  attributes:
+    label: "Diagnostics download"
+    description: "Drag the diagnostics file here."
+  validations:
+    required: true

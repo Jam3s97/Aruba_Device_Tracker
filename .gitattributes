@@ -1,1 +1,3 @@
 * text=auto eol=lf
+# Real REST capture: keep the stray carriage-return line the AP sends, byte for byte.
+tests/fixtures/show_network_real.txt -text

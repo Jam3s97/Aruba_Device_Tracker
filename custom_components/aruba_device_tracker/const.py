@@ -2,11 +2,24 @@
 
 DOMAIN = "aruba_device_tracker"
 
+# The config subentry that groups this integration's own devices (the IAP
+# device and the AP devices) on the integration page, apart from the devices
+# HA links to trackers by MAC. It always exists, AP option on or off. The
+# type id predates the current title; changing it would orphan existing
+# subentries, so it stays.
+CLUSTER_SUBENTRY_TYPE = "access_points"
+CLUSTER_SUBENTRY_TITLE = "Controller and access points"
+
+# Shared by the IAP control device and the AP devices.
+MANUFACTURER = "Aruba Networks (HPE)"
+
 CONF_TRACK_NEW = "track_new_devices"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_CLEANUP_ENABLED = "cleanup_enabled"
 CONF_CLEANUP_DAYS = "cleanup_days"
 CONF_VERIFY_SSL = "verify_ssl"
+CONF_ENABLE_AP_DEVICES = "enable_ap_devices"
+CONF_ENABLE_AREA_SENSORS = "enable_area_sensors"
 
 DEFAULT_TRACK_NEW = False
 DEFAULT_SCAN_INTERVAL = 30  # seconds
@@ -21,6 +34,16 @@ MAX_CLEANUP_DAYS = 365
 # Instant APs ship with a self-signed certificate, so verification is off by
 # default. Users who have provisioned a trusted certificate can opt in.
 DEFAULT_VERIFY_SSL = False
+
+# Each access point in the cluster becomes a device with a client-count sensor.
+# Costs one extra 'show aps' request per poll. On by default (confirmed for
+# the 2.2.0 release, after the beta).
+DEFAULT_ENABLE_AP_DEVICES = True
+
+# Area sensors: opt-in (off by default). When on, every enabled tracker gets
+# one, each created disabled for users to enable individually, since most
+# want them for a few phones only. Needs AP devices, which give the areas.
+DEFAULT_ENABLE_AREA_SENSORS = False
 
 # Client data attribute keys.
 #
@@ -53,6 +76,11 @@ STORAGE_SAVE_DELAY = 60  # seconds
 # failures in a row means the AP is genuinely down: the coordinator then raises
 # UpdateFailed and the trackers go unavailable until a poll succeeds.
 UNAVAILABLE_AFTER_FAILED_POLLS = 3
+
+# The configured networks rarely change, so 'show network' is fetched at
+# startup and then this often. Per-network counts are still recounted every
+# poll, from the client list.
+NETWORK_REFRESH_MINUTES = 30
 
 # Stale-device cleanup measures staleness in days, so hourly is ample.
 CLEANUP_INTERVAL_HOURS = 1
