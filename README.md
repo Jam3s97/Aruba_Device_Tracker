@@ -41,7 +41,7 @@ No more adding a custom repository: just search for **Aruba Device Tracker** in 
 - **Access points as devices** - each AP in your cluster appears as a device with a **Connectivity** sensor (is the AP online?) and a **Clients** sensor (how many devices are connected to it), plus a **Total clients** sensor for the whole cluster. See [Access Points](#access-points)
 - **Clients per network** - a sensor for each Wi-Fi network (SSID) on your controller, counting the devices connected to it. See [Clients per Network](#clients-per-network)
 - **Area sensors** - an optional sensor per device showing the area of the access point it's connected to. See [Area Sensors](#area-sensors)
-- **Diagnostics download** - one click gives you a file to attach to bug reports, with device names, MAC addresses, IP addresses, SSIDs and serial numbers removed. See [Reporting a Problem or a New AP Model](#reporting-a-problem-or-a-new-ap-model)
+- **Diagnostics download** - one click gives you an anonymised file to attach to bug reports, with device names, MAC addresses, IP addresses, SSIDs and serial numbers removed. See [Reporting a Problem or a New AP Model](#reporting-a-problem-or-a-new-ap-model)
 - **AP outages show as unavailable** - a single failed poll is ignored and the last known state is kept. If the IAP fails to answer 3 polls in a row, trackers become `unavailable` (rather than showing stale home/away) until it responds again. The outage and the recovery are each logged once. A device that has simply left is always `not_home`, never `unavailable`
 
 ## Requirements
@@ -135,24 +135,25 @@ If you'd rather keep private addresses on, add both trackers to the same [person
 > [!NOTE]
 > New in 2.2.0. It is **on by default**, including for existing installs when they upgrade. Turn it off under **Configure → Access points as devices** if you don't want it.
 
-Each access point in your cluster becomes a device in Home Assistant, named as it is on the controller (for example *LoungeAP*), with its model and serial number. On the integration's page they're listed together with the IAP device under a **Controller and access points** group, apart from any devices Home Assistant has linked to your trackers (such as a camera or vacuum another integration already knows about). Each AP device has:
+Each access point in your cluster becomes a device in Home Assistant, named as it is on the controller (for example *LoungeAP*), with its model and serial number. On the integration's page they're listed together with the IAP device under a **Controller and access points** group.
+
+Each AP device has:
 
 - **Connectivity** - **Connected** while the AP is part of the cluster, **Disconnected** when it drops out of the cluster (for example, powered off or rebooting)
 - **Clients** - how many devices are connected to that AP right now
 
-The IAP device also gets a **Total clients** sensor for the whole cluster. It counts the devices the trackers already see, so it stays even with access points as devices turned off.
+The IAP device also gets a **Total clients** sensor for the whole cluster.
 
 **How quickly it updates.** In testing on a AP cluster, an AP that lost power dropped out of the cluster within 1–1½ minutes, so **Connectivity** shows **Disconnected** within about 2 minutes, counting the time until the next poll. A rebooting AP rejoins about 3 minutes after power returns, and shows **Connected** as soon as it does.
-
-**While an AP is offline**, its **Clients** sensor is unavailable rather than showing 0, and the devices that were connected to it roam to other APs as usual. If Home Assistant restarts while an AP is offline, the AP still shows **Disconnected** rather than disappearing.
 
 **Use the Virtual Controller IP.** The access point list is read from the cluster's conductor (the AP currently running the Virtual Controller). Configure the integration with the **Virtual Controller IP** rather than a single AP's address, so it keeps working if a different AP takes over as conductor. To change it, use **Reconfigure** (see above).
 
 **What it costs.** One extra request to the AP per poll. The sensors only write to the recorder database when a value actually changes: an AP going offline or coming back, or a device joining or leaving.
 
-**Removing an AP for good.** An AP that goes offline keeps its device, so a reboot doesn't lose its name, area or customisations. To remove an AP you have retired, open its device page and choose **Delete**. Home Assistant only allows this once the AP is no longer in the cluster, because an AP that is still reporting would come straight back.
+**Removing an AP for good.** An AP that goes offline keeps its device, so a reboot doesn't lose its name, area or customisations. To remove an AP you have retired, open its device page and choose **Delete**. Home Assistant only allows this once the AP is no longer in the cluster.
 
-**Turning it off** removes the AP devices and their sensors. Device trackers, the IAP device's switches and settings, and **Total clients** are not touched. Deleting the **Controller and access points** group from its **⋮** menu does the same thing: the integration turns the option off and reloads, and the IAP device comes back in the group on its own.
+**Turning it off** removes the AP devices and their sensors.
+Device trackers and **Total clients** are not touched.
 
 > [!NOTE]
 > Clients are matched to APs by AP name. If two APs share a name their counts can't be told apart, and a warning is logged: give each AP a unique name on the controller.
@@ -181,7 +182,7 @@ Area sensors are **off by default**. Turning on **Configure → Area sensors** c
 
 To set it up:
 
-1. Turn on **Access points as devices** (it's on by default) and **Area sensors** (off by default), both under **Configure**.
+1. Turn on **Access points as devices** (it's on by default) and turn on **Area sensors** (off by default), both under **Configure**.
 2. Give each access point an area: open the AP's device page and set its **Area**. If any are missing once you've enabled an Area sensor, a notice under **Settings → Repairs** lists them.
 3. Enable the Area sensors you want.
 
@@ -191,7 +192,7 @@ Each Area sensor is named after its device when the sensor is first created. If 
 
 ## Reporting a Problem or a New AP Model
 
-The integration has only been tested on a few AP models and firmware versions, so reports from other hardware are very welcome, whether everything works or not.
+The integration has been tested on a few AP models and firmware versions, so reports from other hardware are very welcome, whether everything works or not.
 
 1. Go to **Settings → Devices & services → Aruba Device Tracker**
 2. Open the **⋮** menu on your entry and choose **Download diagnostics**
@@ -221,7 +222,8 @@ Home Assistant writes a row to the recorder database whenever an entity's state 
 
 This integration is designed so that a device sitting still costs **nothing**:
 
-- **`signal` and `speed` are not exposed.** The IAP reports both and they are still parsed (they show up in debug logs), but their values change almost continuously, making them pure database churn. See the note below if you were using them.
+- **`signal` and `speed` are not exposed.** The IAP reports both and they are still parsed (they show up in debug logs), but their values change almost continuously, making them pure database churn.
+
 - **`last_seen` and `days_until_cleanup` are only published while a device is away.** For a connected device "last seen" is always ~now, so it changed every poll while telling you nothing the `home` state didn't already.
 
 What remains - `access_point`, `essid`, `ip_address`, `os`, `channel` - only changes when something actually changes: the device roams to another AP, gets a new IP, or switches band. So a device that stays connected to the same AP writes one row when it arrives and one when it leaves.
