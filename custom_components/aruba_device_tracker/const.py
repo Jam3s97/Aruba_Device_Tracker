@@ -36,8 +36,8 @@ MAX_CLEANUP_DAYS = 365
 DEFAULT_VERIFY_SSL = False
 
 # Each access point in the cluster becomes a device with a client-count sensor.
-# Costs one extra 'show aps' request per poll. On by default for the 2.2 beta;
-# revisit before the stable release.
+# Costs one extra 'show aps' request per poll. On by default (confirmed for
+# the 2.2.0 release, after the beta).
 DEFAULT_ENABLE_AP_DEVICES = True
 
 # Area sensors: opt-in (off by default). When on, every enabled tracker gets
