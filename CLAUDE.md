@@ -111,6 +111,23 @@ Verified 2026-09-29: the integration passes its full suite and imports cleanly o
 
 Verified again 2026-10-23 for 2.2.0-beta.1: the full suite (170 tests) passes on both 2026.3.2 (a scratch virtualenv from `requirements.txt`) and 2026.9.4 (the dev container, which has drifted from the pin). 2026.9 is where the gap shows: it deprecates device-registry `via_device` and `add_/remove_config_entry_id` (both removed in 2027.8), and its `DeviceInfo` has `via_device_id`, which 2026.3.2 lacks. The AP feature avoids both deprecations (see Architecture). That is the kind of drift the dev/floor CI matrix would catch automatically.
 
+Checked 2026-11-06 on **2026.11.0** (Python 3.14): all 259 tests pass. One test, `test_verify_ssl_true_is_passed_through`, fails if `REQUESTS_CA_BUNDLE` is set in the environment (requests then passes the bundle path as `verify`), so unset it when testing in a proxied container. A live instance was also run against a fake IAP serving the `*_real.txt` fixtures. Everything behaved as described in Architecture except one new deprecation, below.
+
+### Tracker device info (must fix before HA 2027.11)
+
+Found 2026-11-06 on HA 2026.11.0, not yet decided. On every setup HA logs:
+
+> Detected that custom integration 'aruba_device_tracker' does not provide device info for its ScannerEntity device tracker, it should provide device info with the MAC address of the tracked device in its connections, or an empty DeviceInfo() if the tracker should not have a device. This will stop working in Home Assistant 2027.11.0
+
+- Cause: `ArubaClientEntity` sets no `device_info`. Since 2026.11, `ScannerEntity.async_prepare_to_add_to_hass` fills the gap with `_async_set_default_device_info` (in `homeassistant/components/device_tracker/entity.py`): `DeviceInfo(connections={mac})`, named after the hostname, or after the MAC if no device with that MAC exists yet. That fallback, and its warning, go in 2027.11.
+- Effect today on 2026.11: one device per tracker (32 in the test run), outside the cluster subentry, so all of them sit in HA's "Devices that don't belong to a sub-entry" section.
+- Two ways to fix it:
+  - `DeviceInfo(connections={(CONNECTION_NETWORK_MAC, mac)})`: keeps a device per tracker, and keeps linking trackers to other integrations' devices with the same MAC.
+  - `DeviceInfo()`: no device for trackers. Simpler, but loses that link.
+- Before choosing, check what each option does on the **2026.3.2 floor**, not just on 2026.11. Setting device info ourselves may create a device per tracker there too, where today 2026.3 only links trackers to devices that already exist. Users on the floor would see that as new behaviour.
+- This overlaps with the tracked-devices subentry plan above: the devices it would group are the same ones this decides about. Decide the two together.
+- Also new on 2026.11: HA core adds `tracking_type` and `in_zones` attributes to trackers. Both only change on a real change, so they don't add recorder rows per poll.
+
 ### pytest-homeassistant-custom-component (parked)
 
 Not added. It is the only practical way to cover the config flow, options flow, reauth flow and the real `Store` per-entry migration, which currently have no automated tests. Costs measured 2026-09-29:
