@@ -1,6 +1,9 @@
 {
   "domain": "aruba_device_tracker",
   "name": "Aruba Device Tracker",
+  "categories": [
+    "presence_location.network_presence"
+  ],
   "codeowners": [
     "@Jam3s97"
   ],
