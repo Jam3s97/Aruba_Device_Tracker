@@ -8,7 +8,9 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.device_tracker import ScannerEntity, SourceType
 from homeassistant.core import callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.device_registry import DeviceInfo
 
 from .const import (
     ATTR_ACCESS_POINT,
@@ -164,6 +166,41 @@ class ArubaClientEntity(ScannerEntity):
         # Set initial connected state synchronously from coordinator data
         # (first_refresh has already completed before async_setup_entry runs).
         self._connected: bool = mac in (coordinator.data or {})
+
+    async def async_prepare_to_add_to_hass(self) -> None:
+        """
+        Describe the tracked device before the entity is added.
+
+        Home Assistant 2026.11 fills in device info for a tracker that has
+        none, warns that it does, and stops doing so in 2027.11. Setting it
+        here, before ScannerEntity's own hook runs, skips that fallback.
+        Only 2026.11+ calls this hook. On older versions
+        ScannerEntity.device_info is final and returns None, so their own
+        device handling (linking to a device another integration made) is
+        unchanged.
+        """
+        self._attr_device_info = self._tracked_device_info()
+        await super().async_prepare_to_add_to_hass()
+
+    @callback
+    def _tracked_device_info(self) -> DeviceInfo:
+        """
+        Return device info that links this tracker to its device by MAC.
+
+        The same as Home Assistant 2026.11's fallback, so existing devices
+        keep their names: named after the hostname, or after the MAC only
+        when this entry has no device for the MAC yet. An offline device
+        has no hostname, and the MAC must not replace its known name.
+        """
+        connections = {(dr.CONNECTION_NETWORK_MAC, self._mac)}
+        if self.hostname:
+            return DeviceInfo(connections=connections, name=self.hostname)
+        if dr.async_get(self.hass).async_get_devices(
+            connections=connections,
+            config_entry_id=self._coordinator.config_entry.entry_id,
+        ):
+            return DeviceInfo(connections=connections)
+        return DeviceInfo(connections=connections, name=self._mac)
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to coordinator updates."""

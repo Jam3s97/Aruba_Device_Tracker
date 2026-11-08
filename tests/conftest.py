@@ -81,6 +81,14 @@ class FakeDeviceRegistry:
         msg = "async_get_device is deprecated; use utils.find_ap_device"
         raise AssertionError(msg)
 
+    def async_get_devices(self, *, connections, config_entry_id):
+        return [
+            d
+            for d in self.devices
+            if getattr(d, "connections", set()) & connections
+            and d.config_entry_id == config_entry_id
+        ]
+
     def async_update_device(self, device_id, **changes) -> None:
         self.updates.append((device_id, changes))
 
