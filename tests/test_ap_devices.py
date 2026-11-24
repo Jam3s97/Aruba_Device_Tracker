@@ -16,7 +16,7 @@ from homeassistant.const import Platform
 from homeassistant.exceptions import ConfigEntryAuthFailed
 
 import custom_components.aruba_device_tracker as integration
-from custom_components.aruba_device_tracker import config_flow
+from custom_components.aruba_device_tracker import config_flow, const
 from custom_components.aruba_device_tracker.aruba_client import (
     ArubaAP,
     ArubaAuthError,
@@ -639,13 +639,13 @@ class TestSetupAndUnload:
         assert calls["removed"] == 1
 
     def test_platform_lists(self):
-        assert integration.BASE_PLATFORMS == [
+        assert const.BASE_PLATFORMS == [
             Platform.DEVICE_TRACKER,
             Platform.SWITCH,
             Platform.NUMBER,
             Platform.SENSOR,  # Total clients needs no 'show aps'
         ]
-        assert integration.AP_PLATFORMS == [Platform.BINARY_SENSOR]
+        assert const.AP_PLATFORMS == [Platform.BINARY_SENSOR]
 
     def test_unload_uses_the_platforms_setup_forwarded(self):
         """Toggling the option must not change what the reload's unload expects."""

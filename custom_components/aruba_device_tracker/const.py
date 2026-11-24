@@ -1,5 +1,7 @@
 """Constants for the Aruba Device Tracker integration."""
 
+from homeassistant.const import Platform
+
 DOMAIN = "aruba_device_tracker"
 
 # The config subentry that groups this integration's own devices (the IAP
@@ -85,3 +87,20 @@ NETWORK_REFRESH_MINUTES = 30
 
 # Stale-device cleanup measures staleness in days, so hourly is ample.
 CLEANUP_INTERVAL_HOURS = 1
+
+# Platforms setup forwards. BASE_PLATFORMS always; AP_PLATFORMS only while the
+# AP-devices option is on (see coordinator.platforms).
+BASE_PLATFORMS: list[Platform] = [
+    Platform.DEVICE_TRACKER,
+    Platform.SWITCH,
+    Platform.NUMBER,
+    # Always: Total clients counts the client list and needs no 'show aps'.
+    # The per-AP Clients sensors on it are only added while the AP option is
+    # on (sensor.py).
+    Platform.SENSOR,
+]
+
+# Forwarded only while the AP-devices option is on. Every entity on these
+# platforms belongs to that feature, which is what lets turning it off remove
+# them by domain.
+AP_PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR]

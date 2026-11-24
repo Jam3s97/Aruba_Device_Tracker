@@ -6,7 +6,7 @@ import importlib
 
 import pytest
 
-from custom_components.aruba_device_tracker import AP_PLATFORMS, BASE_PLATFORMS
+from custom_components.aruba_device_tracker.const import AP_PLATFORMS, BASE_PLATFORMS
 
 
 @pytest.mark.parametrize("platform", [p.value for p in BASE_PLATFORMS + AP_PLATFORMS])
