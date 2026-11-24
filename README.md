@@ -108,6 +108,29 @@ To change the IP address, username, password, or certificate verification, open 
 
 The password field is not pre-filled - leave it blank to keep the stored password.
 
+## Removing the Integration
+
+1. Go to **Settings → Devices & services → Aruba Device Tracker**
+2. Open the **⋮** menu on the entry and choose **Delete**. If you added more than one cluster or AP, delete each entry
+3. To uninstall the integration as well, use the Marketplace (HACS):
+   - **Home Assistant 2026.11 or later:** when you delete the last entry, Home Assistant asks whether to uninstall the integration too. To do it later, go to **Settings → Marketplace**, open **Aruba Device Tracker**, then choose **⋮ → Uninstall**
+   - **Home Assistant 2026.10 or earlier:** open **HACS**, find **Aruba Device Tracker**, choose **Remove**, then restart Home Assistant
+   - **Manual install:** delete the `config/custom_components/aruba_device_tracker` folder and restart Home Assistant
+
+Deleting an entry removes all of its devices and entities: trackers, access points, sensors and controls. A device that another integration also uses (for example a camera linked to its tracker by MAC address) stays, without the tracker. Deleting the entry also deletes its saved last-seen times.
+
+A few things are left for you to tidy up:
+
+- **People, automations and dashboards** that use the trackers aren't changed. Remove the trackers from each person under **Settings → People**, and update anything else that refers to them
+- **The IAP itself.** The integration doesn't change any settings on the IAP. If you turned on the REST API or created an account just for Home Assistant, you can turn it off or remove it:
+
+```
+Instant AP# configure
+Instant AP(config)# no allow-rest-api
+Instant AP(config)# end
+Instant AP# commit apply
+```
+
 ## Multiple Clusters or Standalone APs
 
 One config entry covers a whole Instant cluster: add the Virtual Controller's IP once, and devices roaming between APs in that cluster stay a single tracker.
