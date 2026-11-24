@@ -64,8 +64,9 @@ ATTR_LAST_SEEN = "last_seen"
 ATTR_DAYS_UNTIL_CLEANUP = "days_until_cleanup"
 
 # Storage for last-seen timestamps. The live key is built per config entry as
-# f"{DOMAIN}.{entry_id}.last_seen"; LEGACY_STORAGE_KEY is the pre-2.0 shared
-# key, still read once to migrate existing installs.
+# f"{DOMAIN}.{entry_id}.last_seen" (deleted by async_remove_entry when the
+# entry is removed); LEGACY_STORAGE_KEY is the pre-2.0 shared key, still read
+# once to migrate existing installs.
 STORAGE_VERSION = 1
 LEGACY_STORAGE_KEY = f"{DOMAIN}.last_seen"
 
