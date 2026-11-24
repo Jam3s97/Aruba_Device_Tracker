@@ -1,14 +1,10 @@
 # Aruba Instant AP - Home Assistant Integration
 
-[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://hacs.xyz/)
+[![Marketplace (HACS)](https://img.shields.io/badge/Marketplace%20%28HACS%29-Default-41BDF5.svg)](https://www.home-assistant.io/integrations/marketplace/)
 [![GitHub Release](https://img.shields.io/github/v/release/Jam3s97/Aruba_Device_Tracker)](https://github.com/Jam3s97/Aruba_Device_Tracker/releases)
 
 
 A custom integration for Home Assistant that tracks devices connected to Aruba Instant APs using the local REST API.
-
-### 🎉 Now in the HACS default store!
-
-No more adding a custom repository: just search for **Aruba Device Tracker** in HACS.
 
 > **Disclaimer:** This is an unofficial integration and is not affiliated with or endorsed by Aruba Networks. Use at your own risk.
 
@@ -59,15 +55,14 @@ Instant AP# commit apply
 
 ## Installation
 
-### HACS (recommended)
+### Marketplace or HACS (recommended)
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Jam3s97&repository=Aruba_Device_Tracker&category=integration)
+[![Open this repository in the Marketplace (HACS) in your Home Assistant instance.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Jam3s97&repository=Aruba_Device_Tracker&category=integration)
 
-Aruba Device Tracker is in the HACS default store, so there's no custom repository to add.
+Aruba Device Tracker is in the Marketplace catalog, so there's no custom repository to add. Click the button above, or:
 
-1. Click the button above, or open **HACS** in Home Assistant and search for **Aruba Device Tracker**
-2. Click **Download**
-3. Restart Home Assistant
+- **Home Assistant 2026.11 or later:** go to **Settings → Marketplace**, search for **Aruba Device Tracker** and choose **Install**. Home Assistant goes straight into [setup](#setup), with no restart
+- **Home Assistant 2026.10 or earlier:** open **HACS**, search for **Aruba Device Tracker**, choose **Download**, then restart Home Assistant
 
 ### Manual
 1. Copy the `custom_components/aruba_device_tracker` folder into your HA `config/custom_components/` directory
