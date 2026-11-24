@@ -217,14 +217,17 @@ class ArubaClientAreaSensor(CoordinatorEntity["ArubaIAPCoordinator"], SensorEnti
     """
 
     _attr_entity_registry_enabled_default = False
+    _attr_has_entity_name = True
     _attr_icon = "mdi:map-marker-radius"
 
     def __init__(self, coordinator: ArubaIAPCoordinator, mac: str, name: str) -> None:
         """
         Initialise the sensor.
 
-        No device, so no has_entity_name: the name is the tracker's name plus
-        " area", fixed when the sensor is first created.
+        The name is the tracker's name plus " area", fixed when the sensor is
+        first created. It has no device, so has_entity_name adds no prefix:
+        the friendly name and entity ID are that name alone, as they were
+        before it was set (quality-scale rule has-entity-name).
         """
         super().__init__(coordinator)
         self.mac = mac

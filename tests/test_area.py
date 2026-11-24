@@ -151,6 +151,9 @@ class TestState:
         assert sensor.name == "Jo's phone area"
         assert sensor.unique_id == f"{ENTRY_ID}_area_{PHONE}"
         assert sensor.device_info is None  # no device per phone
+        # Required by the has-entity-name rule. With no device HA adds no
+        # prefix, so the name above is still the whole friendly name.
+        assert sensor.has_entity_name is True
 
 
 def area_sensors(added: list) -> list:
