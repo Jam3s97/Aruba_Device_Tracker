@@ -38,6 +38,11 @@ LOGGER = logging.getLogger(__name__)
 SECONDS_PER_DAY = 86400
 
 
+# Entities read the coordinator's data and never poll the AP themselves, so
+# there is nothing to limit.
+PARALLEL_UPDATES = 0
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ArubaConfigEntry,

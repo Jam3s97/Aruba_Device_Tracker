@@ -32,6 +32,11 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
+# Commands only write the entry's options, never the AP, and state comes from
+# those options, so there is nothing to limit.
+PARALLEL_UPDATES = 0
+
+
 async def async_setup_entry(
     hass: HomeAssistant,  # noqa: ARG001
     entry: ArubaConfigEntry,

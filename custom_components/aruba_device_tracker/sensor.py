@@ -40,6 +40,11 @@ if TYPE_CHECKING:
     from . import ArubaConfigEntry, ArubaIAPCoordinator
 
 
+# Entities read the coordinator's data and never poll the AP themselves, so
+# there is nothing to limit.
+PARALLEL_UPDATES = 0
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ArubaConfigEntry,
