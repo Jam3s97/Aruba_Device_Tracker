@@ -12,6 +12,8 @@
         },
         "data_description": {
           "host": "IP address of your Aruba IAP or Virtual Controller (e.g. 192.168.1.10)",
+          "username": "The admin account you use to sign in to the IAP's web interface. Read-only accounts can't run the commands the integration needs.",
+          "password": "The password for that account.",
           "verify_ssl": "Leave off unless you have installed a trusted certificate on the IAP. Instant APs ship with a self-signed certificate that cannot be verified."
         }
       },
@@ -41,6 +43,10 @@
         "data": {
           "username": "Username",
           "password": "Password"
+        },
+        "data_description": {
+          "username": "Filled in with the username in use. Change it if the account has changed.",
+          "password": "The account's current password."
         }
       },
       "reconfigure": {
@@ -54,6 +60,7 @@
         },
         "data_description": {
           "host": "IP address of your Aruba IAP or Virtual Controller (e.g. 192.168.1.10)",
+          "username": "The admin account you use to sign in to the IAP's web interface. Read-only accounts can't run the commands the integration needs.",
           "password": "Leave blank to keep the stored password.",
           "verify_ssl": "Leave off unless you have installed a trusted certificate on the IAP. Instant APs ship with a self-signed certificate that cannot be verified."
         }

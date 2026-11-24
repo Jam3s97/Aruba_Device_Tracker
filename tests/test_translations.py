@@ -28,3 +28,19 @@ def test_config_subentry_types_have_the_keys_hassfest_requires():
         missing = {"entry_type", "initiate_flow", "step"} - set(strings)
         assert not missing, f"{subentry_type} is missing {sorted(missing)}"
         assert "user" in strings["initiate_flow"], subentry_type
+
+
+def test_every_flow_field_has_a_description():
+    """
+    Each config and options flow field has help text (quality-scale config-flow).
+
+    HA shows data_description under the field, so a missing one leaves the
+    user guessing, for example which account the integration needs.
+    """
+    strings = load("strings.json")
+    for flow in ("config", "options"):
+        for step_id, step in strings[flow]["step"].items():
+            missing = set(step.get("data", {})) - set(step.get("data_description", {}))
+            assert not missing, (
+                f"{flow}.step.{step_id} has no description for {sorted(missing)}"
+            )
