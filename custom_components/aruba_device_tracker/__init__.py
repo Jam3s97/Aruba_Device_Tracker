@@ -102,6 +102,17 @@ def _option(entry: ConfigEntry, key: str, default: object) -> object:
     return entry.options.get(key, entry.data.get(key, default))
 
 
+def _last_seen_store(hass: HomeAssistant, entry_id: str) -> Store[dict[str, str]]:
+    """
+    Return the entry's last-seen store.
+
+    Scoped per config entry: a shared key would make two APs overwrite each
+    other's last-seen map on every poll. Shared by the coordinator and
+    async_remove_entry, so the file removed is the one that was written.
+    """
+    return Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry_id}.last_seen")
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ArubaConfigEntry,
@@ -413,6 +424,20 @@ async def async_unload_entry(
     return unloaded
 
 
+async def async_remove_entry(hass: HomeAssistant, entry: ArubaConfigEntry) -> None:
+    """
+    Delete the entry's last-seen file when the integration is removed.
+
+    HA removes the entry's devices and entities itself, but not files in
+    .storage. Without this, each removed entry left its file behind for good.
+    HA unloads the entry first, and unloading flushes with async_save, which
+    cancels any pending delayed write, so no late save can recreate the file.
+    The legacy shared file is not touched: it predates per-entry storage and
+    is kept so a downgrade still finds its data.
+    """
+    await _last_seen_store(hass, entry.entry_id).async_remove()
+
+
 class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
     """Coordinator that polls the Aruba IAP for connected client data."""
 
@@ -435,11 +460,7 @@ class ArubaIAPCoordinator(DataUpdateCoordinator[dict[str, ArubaClientData]]):
             update_interval=timedelta(seconds=scan_interval),
         )
         self.client = client
-        # Storage is scoped per config entry: a shared key would make two APs
-        # overwrite each other's last-seen map on every poll.
-        self._store: Store[dict[str, str]] = Store(
-            hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.last_seen"
-        )
+        self._store = _last_seen_store(hass, entry.entry_id)
         # MAC -> ISO-format UTC timestamp string
         self.last_seen: dict[str, str] = {}
         self._last_cleanup: datetime | None = None
