@@ -133,3 +133,12 @@ The PHCC costs measured on 2026-09-29, kept because the migration work is the sa
 - Breaks 25 of 63 existing tests on install: its autouse fixtures call `asyncio.get_event_loop()`, and `test_coordinator_cleanup.py` uses bare `asyncio.run()`, which closes the loop. Client (37) and entity (10) tests are unaffected — so the work is converting those 16 tests to `pytest-asyncio`, not a compatibility wall.
 
 If picked up: add `pytest-homeassistant` at the release matching the pinned HA version, drop the explicit `pytest` and `requests-mock` pins, add the pytest config above, add the plugin to the dependabot ignore list, and convert the `asyncio.run()` tests to `async def`. Only fall back to PHCC (`0.13.318` for 2026.3.2) if a harness is needed on a floor older than 2026.11. PHCC's own maintenance status wasn't checked, but with an official replacement it is unlikely to last.
+
+### Poll interval stays user-configurable (decided 2026-11-24)
+
+The quality-scale rule `appropriate-polling` says the interval "is a choice you make as the developer, for the majority of users. It is not a field in the config flow", and points users who need a different one to an automation that refreshes the entity. Here users can set it in three places: the setup flow's tracking step, **Configure**, and the **Poll interval** number on the IAP device (`MIN_SCAN_INTERVAL` 10 to `MAX_SCAN_INTERVAL` 300 seconds, default 30). This is kept on purpose:
+- The interval trades how quickly someone shows as home or away against load on the IAP's management plane. That load is the usual cause of failed polls, and it differs from one cluster to another.
+- The rule is aimed at integrations that poll too often (cloud APIs especially) and at setup forms full of settings, not at a local AP with a 10-second minimum.
+- Custom integrations have no official tier, and the Marketplace listing didn't ask for it.
+
+Rejected: removing it from the setup step only, keeping Configure and the number entity. That meets the rule's wording but not its intent, which is that the interval isn't user-configurable at all. So reviews report `appropriate-polling` as "not met, by choice". Re-decide only if the integration is proposed for core, where Bronze is required.
